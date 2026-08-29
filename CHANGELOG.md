@@ -9,6 +9,8 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-29
+
 ### Added
 - In-place text formatting: `Ctrl-B` bold, `Ctrl-I` italic (also `Tab` with a
   selection), `Ctrl-L` centre a line or the selected lines, `Ctrl-P` page break.
