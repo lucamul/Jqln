@@ -146,9 +146,12 @@ Desktop environments often reserve <kbd>Alt</kbd>+arrow keys for themselves, and
 some terminals answer <kbd>F1</kbd> before the program sees it. The letter
 alternatives above work everywhere.
 
-A new document is created inside the selected folder when that folder is open,
-and next to the selection otherwise. Keywords are entered as a comma separated
-list.
+A new document or folder always lands just below the selected row: as the last
+child of an open folder, or as the next sibling otherwise. The one exception is
+a new folder made while a folder full of documents is selected — that goes
+*beside* it, since a chapter of scenes wants another chapter next to it, not a
+sub-folder within. Use `>` / `<` afterwards to change any of this. Keywords are
+entered as a comma separated list.
 
 On the card view the same commands apply. Move between cards with the arrow
 keys, or `j` and `k` to change row.
@@ -311,12 +314,14 @@ act on; the selection stays inside the editor and never spills into the tree.
 On the card view, drag a card onto another to drop it into that position among
 its siblings. The wheel scrolls whichever pane is under the pointer.
 
-Capturing the mouse means the terminal hands those events to Jqln instead of
-handling them itself. Jqln does its own click-and-drag selection, but the
-terminal's own drag-to-select-and-copy — the one that reaches your system
-clipboard — is off while capture is on. So it is a mode, not a fixture:
-<kbd>F7</kbd> turns capture off and gives the terminal back its normal selection
-behaviour, and turns it on again when you are done.
+All of that needs Jqln to *see* the mouse — "mouse capture". While it is on,
+the terminal hands mouse events to Jqln; while it is off, the terminal keeps
+them and a drag just selects text on screen the usual way. So it is a mode:
+<kbd>F7</kbd> toggles it, and the status line and the card-view title say which
+way it is set. Capture is on when Jqln starts. Turn it off when you want the
+terminal's own select-and-copy — that is the one that reaches your system
+clipboard, and Jqln cannot do it for you. If a drag is only highlighting text,
+capture is off; press <kbd>F7</kbd>.
 
 ## Searching
 

@@ -87,9 +87,55 @@ fn new_document_goes_inside_an_open_folder() {
     a.on_key(key(KeyCode::Enter));
     let id = a.selected_id().unwrap();
     assert_eq!(a.project.nodes[&id].title, "Scene Two");
-    // "Manuscript" was selected and expanded, so it becomes the parent.
+    // "Manuscript" was selected and expanded, so it becomes the parent, and the
+    // new node is appended after its existing children, never before them.
     let parent = a.project.parent_of(&id);
     assert_eq!(a.project.nodes[&parent].title, "Manuscript");
+    assert_eq!(a.project.children[&parent].last().unwrap(), &id);
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[test]
+fn a_new_folder_beside_a_chapter_not_inside_it() {
+    let mut a = app();
+    // "Chapter One" is open and holds "Opening Scene" — a chapter, not a part.
+    a.on_key(key(KeyCode::Down));
+    let chapter_one = a.selected_id().unwrap();
+    let manuscript = a.project.parent_of(&chapter_one);
+    let before = a.project.index_in_parent(&chapter_one);
+
+    a.on_key(key(KeyCode::Char('f')));
+    type_str(&mut a, "Chapter Two");
+    a.on_key(key(KeyCode::Enter));
+    let new = a.selected_id().unwrap();
+
+    assert_eq!(a.project.parent_of(&new), manuscript, "a sibling of Chapter One");
+    assert_eq!(a.project.index_in_parent(&new), before + 1, "immediately after it");
+
+    // A new *document* on that same chapter still goes inside it.
+    a.select_id(&chapter_one);
+    a.on_key(key(KeyCode::Char('n')));
+    type_str(&mut a, "Second Scene");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.project.parent_of(&a.selected_id().unwrap()), chapter_one);
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[test]
+fn a_new_folder_nests_into_a_folder_of_folders() {
+    let mut a = app();
+    // "Manuscript" holds "Chapter One" (a folder) and no loose documents.
+    let manuscript = a.selected_id().unwrap();
+    assert_eq!(a.project.nodes[&manuscript].title, "Manuscript");
+
+    a.on_key(key(KeyCode::Char('f')));
+    type_str(&mut a, "Chapter Two");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(
+        a.project.parent_of(&a.selected_id().unwrap()),
+        manuscript,
+        "a folder of folders takes new chapters inside it"
+    );
     let _ = std::fs::remove_dir_all(&a.project.root);
 }
 
@@ -563,3 +609,4 @@ fn h_sets_a_chapter_heading_override() {
     assert_eq!(a.project.nodes[&id].heading, "");
     let _ = std::fs::remove_dir_all(&a.project.root);
 }
+

@@ -17,11 +17,17 @@ pub(super) fn draw_cards(f: &mut Frame, app: &mut App, area: Rect) {
         .and_then(|c| app.project.nodes.get(&c).map(|n| n.title.clone()))
         .unwrap_or_else(|| app.project.meta.name.clone());
 
+    let heading = if app.mouse {
+        format!(" {container} — cards ")
+    } else {
+        // Drag-to-reorder needs the app to see the mouse.
+        format!(" {container} — cards  ·  F7 to drag ")
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(ACCENT))
         .title(Span::styled(
-            format!(" {container} — cards "),
+            heading,
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ));
     let inner = block.inner(area);

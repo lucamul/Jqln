@@ -585,3 +585,15 @@ fn a_dragged_card_marks_its_drop_target() {
     assert_eq!(corner.fg, ratatui::style::Color::Yellow, "drop target should be highlighted");
     let _ = std::fs::remove_dir_all(&app.project.root);
 }
+
+#[test]
+fn card_view_hints_at_f7_when_mouse_is_off() {
+    let mut app = scratch_app("card-f7-hint");
+    app.view = View::Corkboard;
+    app.sel = 2;
+    app.mouse = true;
+    assert!(!render(&mut app, 90, 16).contains("F7 to drag"));
+    app.mouse = false;
+    assert!(render(&mut app, 90, 16).contains("F7 to drag"), "off-state should prompt F7");
+    let _ = std::fs::remove_dir_all(&app.project.root);
+}

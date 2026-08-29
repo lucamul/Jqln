@@ -1,13 +1,19 @@
 name: Release
 
-# Runs on every push to main. If Cargo.toml's version has no matching git tag,
-# the push is treated as a release: it tags the commit, builds binaries for the
-# supported targets, and publishes a GitHub Release with checksums and the
-# changelog section. Non-release pushes fall straight through the `check` job.
+# Fires only when a pull request labelled `release` is merged into main (the
+# Release-prep workflow opens and labels that PR), or when dispatched by hand.
+# It builds binaries for the supported targets and publishes a GitHub Release
+# whose tag is created from Cargo.toml's version. No personal access token is
+# needed — the release's tag is created by the publish step.
 
 on:
-  push:
-    branches: [main]
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release — must equal Cargo.toml on main (e.g. 0.1.0)."
+        required: true
 
 permissions:
   contents: write
@@ -18,46 +24,39 @@ concurrency:
 
 jobs:
   check:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       contains(github.event.pull_request.labels.*.name, 'release'))
     runs-on: ubuntu-latest
     outputs:
-      release: ${{ steps.v.outputs.release }}
       version: ${{ steps.v.outputs.version }}
+      sha: ${{ steps.v.outputs.sha }}
+      go: ${{ steps.v.outputs.go }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
           fetch-depth: 0
       - id: v
         run: |
           version=$(grep -m1 -E '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ "${{ github.event_name }}" = workflow_dispatch ] \
+             && [ "${{ inputs.version }}" != "$version" ]; then
+            echo "::error::input '${{ inputs.version }}' != Cargo.toml '$version'"; exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
-            echo "release=false" >> "$GITHUB_OUTPUT"
-            echo "v$version is already tagged — nothing to release."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$version is already tagged — nothing to release."
           else
-            echo "release=true" >> "$GITHUB_OUTPUT"
-            echo "Releasing v$version."
+            echo "go=true" >> "$GITHUB_OUTPUT"
           fi
 
-  tag:
-    needs: check
-    if: needs.check.outputs.release == 'true'
-    runs-on: ubuntu-latest
-    # For an extra "Approve deployment" click after the merge, create a
-    # `release` environment with required reviewers and uncomment:
-    # environment: release
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.RELEASE_TOKEN }}
-      - run: |
-          v="v${{ needs.check.outputs.version }}"
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$v" -m "$v"
-          git push origin "$v"
-
   build:
-    needs: [check, tag]
+    needs: check
+    if: needs.check.outputs.go == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -69,7 +68,9 @@ jobs:
           - { target: x86_64-pc-windows-msvc,    os: windows-latest }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check.outputs.sha }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -99,9 +100,12 @@ jobs:
 
   publish:
     needs: [check, build]
+    if: needs.check.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check.outputs.sha }}
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -113,9 +117,11 @@ jobs:
           awk -v ver="$v" \
             '$0 ~ "^## \\[" ver "\\]" {f=1; next} f && /^## \[/ {exit} f' \
             CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Release v$v" > notes.md
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.check.outputs.version }}
+          target_commitish: ${{ needs.check.outputs.sha }}
           name: v${{ needs.check.outputs.version }}
           body_path: notes.md
           files: dist/*

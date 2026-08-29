@@ -1,13 +1,13 @@
 name: Release prep
 
 # Push a branch named `release/X.Y.Z`. This validates it, bumps the version,
-# regenerates Cargo.lock and THIRD-PARTY-NOTICES, rolls the changelog, and opens
-# a "Release vX.Y.Z" pull request to main. Merging that PR (your approval) hands
-# off to the Release workflow, which tags and publishes.
+# syncs Cargo.lock and THIRD-PARTY-NOTICES, rolls the changelog, and opens a
+# "Release vX.Y.Z" pull request to main with the `release` label. Merging that
+# PR (your approval) triggers the Release workflow, which builds and publishes.
 #
-# Requires a repository secret `RELEASE_TOKEN`: a fine-grained PAT scoped to this
-# repo with Contents: read/write, Pull requests: read/write, Workflows: write.
-# (The default GITHUB_TOKEN cannot push commits that then re-trigger CI.)
+# One-time setup: Settings -> Actions -> General -> Workflow permissions ->
+# tick "Allow GitHub Actions to create and approve pull requests".
+# No personal access token is needed.
 
 on:
   push:
@@ -38,7 +38,7 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          # The prep commit re-triggers this workflow; only run once.
+          # The prep commit re-triggers this workflow; only act once.
           if [[ "$MSG" == chore\(release\):* ]]; then
             echo "go=false" >> "$GITHUB_OUTPUT"
           else
@@ -55,10 +55,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.guard.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
-          token: ${{ secrets.RELEASE_TOKEN }}
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@v2
@@ -81,6 +81,9 @@ jobs:
             { print }
           ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
 
+      - name: Check the bumped tree still resolves against Cargo.lock
+        run: cargo check --locked --quiet
+
       - name: Commit and push
         run: |
           git config user.name  "github-actions[bot]"
@@ -90,14 +93,13 @@ jobs:
           git push origin "HEAD:$GITHUB_REF_NAME"
 
       - name: Open or update the release PR
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
+          gh label create release --color 0e8a16 --description "Release PR" --force || true
           notes=$(awk -v v="$VERSION" \
             '$0 ~ "^## \\[" v "\\]" {f=1; next} f && /^## \[/ {exit} f' CHANGELOG.md)
-          body=$(printf '%s\n\n---\n_Prepared automatically. Merge to tag and publish v%s._\n' "$notes" "$VERSION")
+          body=$(printf '%s\n\n---\n_Prepared automatically. Merge to build and publish v%s._\n' "$notes" "$VERSION")
           if gh pr view "$GITHUB_REF_NAME" --json number > /dev/null 2>&1; then
-            gh pr edit "$GITHUB_REF_NAME" --title "Release v$VERSION" --body "$body"
+            gh pr edit "$GITHUB_REF_NAME" --title "Release v$VERSION" --body "$body" --add-label release
           else
             gh pr create --base main --head "$GITHUB_REF_NAME" \
               --title "Release v$VERSION" --body "$body" --label release

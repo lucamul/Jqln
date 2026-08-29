@@ -124,9 +124,9 @@ impl App {
             KeyCode::F(7) => {
                 self.mouse = !self.mouse;
                 self.status = if self.mouse {
-                    "Mouse on".into()
+                    "Mouse on — click, and drag to select text or reorder cards".into()
                 } else {
-                    "Mouse off — drag to select text as usual".into()
+                    "Mouse off — the terminal handles selection and copy again".into()
                 };
                 true
             }
@@ -548,18 +548,35 @@ impl App {
                     return;
                 }
                 let kind = if prompt == Prompt::NewFolder { Kind::Folder } else { Kind::Text };
-                // A new node lands inside an expanded folder, otherwise beside
-                // the selection, so creation follows where the eye already is.
+                // A new node follows the selection: the last child of an
+                // expanded folder, or the next sibling otherwise — always just
+                // below the row the eye is on, never above it. A new *folder*
+                // refuses to nest into a folder that already holds documents:
+                // that folder is a chapter, so you want another chapter beside
+                // it, not a sub-folder inside it.
                 let (parent, index) = match self.selected_id() {
                     Some(sel) => {
-                        let is_open_folder = self
+                        let n = self.project.nodes.get(&sel);
+                        let is_open_folder =
+                            n.map(|n| n.kind == Kind::Folder && !n.collapsed).unwrap_or(false);
+                        let holds_documents = self
                             .project
-                            .nodes
+                            .children
                             .get(&sel)
-                            .map(|n| n.kind == Kind::Folder && !n.collapsed)
+                            .map(|kids| {
+                                kids.iter().any(|k| {
+                                    self.project
+                                        .nodes
+                                        .get(k)
+                                        .map(|n| n.kind == Kind::Text)
+                                        .unwrap_or(false)
+                                })
+                            })
                             .unwrap_or(false);
-                        if is_open_folder {
-                            (sel.clone(), Some(0))
+                        let nest = is_open_folder
+                            && !(prompt == Prompt::NewFolder && holds_documents);
+                        if nest {
+                            (sel.clone(), None)
                         } else {
                             (self.project.parent_of(&sel), Some(self.project.index_in_parent(&sel) + 1))
                         }
