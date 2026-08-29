@@ -1,0 +1,12 @@
+# Rust build artifacts
+/target
+
+# Local scratch projects created while testing the editor
+/scratch
+*.jqln-backup
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp

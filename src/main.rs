@@ -1,0 +1,2 @@
+mod project;
+fn main() {}
