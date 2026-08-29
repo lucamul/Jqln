@@ -2,11 +2,15 @@
 name = "jqln"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
 description = "A terminal-native writing studio for long-form prose"
+license = "MIT"
+readme = "README.md"
 
 [dependencies]
 crossterm = "0.29"
 ratatui = "0.30"
+regex = "1.13.1"
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.4"
 tui-textarea-2 = { version = "0.13", default-features = false, features = ["crossterm", "search"] }

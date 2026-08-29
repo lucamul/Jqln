@@ -526,6 +526,7 @@ version = "0.1.0"
 dependencies = [
  "crossterm",
  "ratatui",
+ "regex",
  "serde",
  "toml",
  "tui-textarea-2",
