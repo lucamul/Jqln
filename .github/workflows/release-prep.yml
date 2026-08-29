@@ -2,8 +2,8 @@ name: Release prep
 
 # Push a branch named `release/X.Y.Z`. This validates it, bumps the version,
 # syncs Cargo.lock and THIRD-PARTY-NOTICES, rolls the changelog, and opens a
-# "Release vX.Y.Z" pull request to main with the `release` label. Merging that
-# PR (your approval) triggers the Release workflow, which builds and publishes.
+# "Release vX.Y.Z" pull request to main. Merging that PR (your approval)
+# triggers the Release workflow, which builds and publishes.
 #
 # One-time setup: Settings -> Actions -> General -> Workflow permissions ->
 # tick "Allow GitHub Actions to create and approve pull requests".
@@ -94,13 +94,12 @@ jobs:
 
       - name: Open or update the release PR
         run: |
-          gh label create release --color 0e8a16 --description "Release PR" --force || true
           notes=$(awk -v v="$VERSION" \
             '$0 ~ "^## \\[" v "\\]" {f=1; next} f && /^## \[/ {exit} f' CHANGELOG.md)
           body=$(printf '%s\n\n---\n_Prepared automatically. Merge to build and publish v%s._\n' "$notes" "$VERSION")
           if gh pr view "$GITHUB_REF_NAME" --json number > /dev/null 2>&1; then
-            gh pr edit "$GITHUB_REF_NAME" --title "Release v$VERSION" --body "$body" --add-label release
+            gh pr edit "$GITHUB_REF_NAME" --title "Release v$VERSION" --body "$body"
           else
             gh pr create --base main --head "$GITHUB_REF_NAME" \
-              --title "Release v$VERSION" --body "$body" --label release
+              --title "Release v$VERSION" --body "$body"
           fi

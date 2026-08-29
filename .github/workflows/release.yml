@@ -1,10 +1,10 @@
 name: Release
 
-# Fires only when a pull request labelled `release` is merged into main (the
-# Release-prep workflow opens and labels that PR), or when dispatched by hand.
-# It builds binaries for the supported targets and publishes a GitHub Release
-# whose tag is created from Cargo.toml's version. No personal access token is
-# needed — the release's tag is created by the publish step.
+# Fires when a pull request from a `release/*` branch is merged into main (the
+# Release-prep workflow opens that PR), or when dispatched by hand. It builds
+# binaries for the supported targets and publishes a GitHub Release whose tag
+# is created from Cargo.toml's version. No personal access token is needed —
+# the tag is created by the publish step.
 
 on:
   pull_request:
@@ -27,7 +27,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.merged == true &&
-       contains(github.event.pull_request.labels.*.name, 'release'))
+       startsWith(github.event.pull_request.head.ref, 'release/'))
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
