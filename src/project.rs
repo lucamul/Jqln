@@ -13,6 +13,13 @@
 //! The manifest is the source of truth for tree shape and ordering; the `.md`
 //! files hold nothing but prose so they stay greppable and externally editable.
 
+mod search;
+mod snapshot;
+mod text;
+
+pub use search::Hit;
+pub use text::{count_words, now_year, pretty_stamp, slugify};
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -117,11 +124,72 @@ impl Default for Targets {
     }
 }
 
+/// Everything the PDF ("book") compile needs that is not in the prose itself:
+/// the title-page details, the trim size, the type. Written into every
+/// manifest so the knobs are discoverable — edit them in `jqln.toml`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Book {
+    /// Printed title. Empty falls back to the project name.
+    pub title: String,
+    pub subtitle: String,
+    pub author: String,
+    /// 0 means "the year the book is compiled".
+    pub copyright_year: u32,
+    /// Empty falls back to the author.
+    pub copyright_holder: String,
+    pub publisher: String,
+    pub rights: String,
+    /// A short dedication. When set and no dedication document exists, a
+    /// dedication page is generated for it.
+    pub dedication: String,
+    /// Trim size: one of `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, `a5`.
+    pub trim: String,
+    pub body_font: String,
+    pub body_size: f32,
+    /// Word before the chapter number, e.g. `Chapter`. Empty for a bare numeral.
+    pub chapter_label: String,
+    /// Glyphs drawn between scenes within a chapter.
+    pub scene_break: String,
+    /// Running headers (author verso, title recto) through the body.
+    pub running_heads: bool,
+    /// Start every chapter on a right-hand page. Matches print convention, at
+    /// the cost of the occasional blank verso.
+    pub chapters_on_recto: bool,
+    /// Binder folder holding the front matter. Empty means "Front Matter".
+    pub front_matter_folder: String,
+}
+
+impl Default for Book {
+    fn default() -> Self {
+        Book {
+            title: String::new(),
+            subtitle: String::new(),
+            author: String::new(),
+            copyright_year: 0,
+            copyright_holder: String::new(),
+            publisher: String::new(),
+            rights: "All rights reserved.".to_string(),
+            dedication: String::new(),
+            trim: "5.5x8.5".to_string(),
+            body_font: "Libertinus Serif".to_string(),
+            body_size: 11.0,
+            chapter_label: "Chapter".to_string(),
+            scene_break: "•   •   •".to_string(),
+            running_heads: true,
+            chapters_on_recto: false,
+            front_matter_folder: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Manifest {
     project: Meta,
     #[serde(default)]
     targets: Targets,
+    #[serde(default)]
+    book: Book,
     #[serde(default, rename = "node")]
     nodes: Vec<Node>,
 }
@@ -133,6 +201,7 @@ pub struct Project {
     pub root: PathBuf,
     pub meta: Meta,
     pub targets: Targets,
+    pub book: Book,
     pub nodes: HashMap<NodeId, Node>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
     /// Document bodies, lazily loaded from disk.
@@ -159,6 +228,7 @@ impl Project {
                 compile_separator: default_sep(),
             },
             targets: Targets::default(),
+            book: Book::default(),
             nodes: HashMap::new(),
             children: HashMap::new(),
             bodies: HashMap::new(),
@@ -210,6 +280,7 @@ impl Project {
             root: root.to_path_buf(),
             meta: manifest.project,
             targets: manifest.targets,
+            book: manifest.book,
             nodes,
             children,
             bodies: HashMap::new(),
@@ -463,6 +534,7 @@ impl Project {
         let manifest = Manifest {
             project: self.meta.clone(),
             targets: self.targets.clone(),
+            book: self.book.clone(),
             nodes: ordered,
         };
         let text = toml::to_string_pretty(&manifest)
@@ -474,217 +546,6 @@ impl Project {
         std::fs::write(&tmp, text)?;
         std::fs::rename(&tmp, &final_path)?;
         Ok(())
-    }
-}
-
-/// One matching line inside one document.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hit {
-    pub id: NodeId,
-    /// 1-based line number, or 0 when the title itself matched.
-    pub line: usize,
-    pub preview: String,
-}
-
-/// How a query is matched. Plain text by default; `/pattern/` opts into a
-/// regular expression, since prose is full of characters that would otherwise
-/// be read as syntax.
-enum Matcher {
-    Literal(String),
-    Regex(regex::Regex),
-}
-
-impl Matcher {
-    fn build(query: &str) -> Result<Matcher, String> {
-        let q = query.trim();
-        if q.len() >= 2 && q.starts_with('/') && q.ends_with('/') {
-            let pattern = &q[1..q.len() - 1];
-            if pattern.is_empty() {
-                return Err("empty pattern".to_string());
-            }
-            regex::RegexBuilder::new(pattern)
-                .case_insensitive(true)
-                .build()
-                .map(Matcher::Regex)
-                .map_err(|e| {
-                    // regex errors are multi-line; the first line is the useful bit.
-                    e.to_string().lines().next().unwrap_or("invalid pattern").to_string()
-                })
-        } else {
-            Ok(Matcher::Literal(q.to_lowercase()))
-        }
-    }
-
-    fn matches(&self, haystack: &str) -> bool {
-        match self {
-            Matcher::Literal(l) => haystack.to_lowercase().contains(l),
-            Matcher::Regex(r) => r.is_match(haystack),
-        }
-    }
-}
-
-impl Project {
-    /// Search titles, synopses and prose. Case-insensitive either way.
-    pub fn search(&mut self, query: &str) -> Result<Vec<Hit>, String> {
-        if query.trim().is_empty() {
-            return Ok(Vec::new());
-        }
-        let needle = Matcher::build(query)?;
-        let ids: Vec<NodeId> = self.walk().into_iter().map(|(i, _)| i).collect();
-        let mut hits = Vec::new();
-
-        for id in ids {
-            let (title, synopsis, is_text) = match self.nodes.get(&id) {
-                Some(n) => (n.title.clone(), n.synopsis.clone(), n.kind == Kind::Text),
-                None => continue,
-            };
-            if needle.matches(&title) {
-                hits.push(Hit { id: id.clone(), line: 0, preview: title.clone() });
-            }
-            if needle.matches(&synopsis) {
-                hits.push(Hit { id: id.clone(), line: 0, preview: synopsis });
-            }
-            if !is_text {
-                continue;
-            }
-            let body = self.body(&id);
-            for (n, line) in body.lines().enumerate() {
-                if needle.matches(line) {
-                    hits.push(Hit {
-                        id: id.clone(),
-                        line: n + 1,
-                        preview: line.trim().chars().take(160).collect(),
-                    });
-                }
-            }
-        }
-        Ok(hits)
-    }
-
-    pub fn snapshots_dir(&self, id: &str) -> PathBuf {
-        self.root.join("snapshots").join(id)
-    }
-
-    /// Copy a document's current text aside under a timestamped name.
-    pub fn take_snapshot(&mut self, id: &str) -> std::io::Result<String> {
-        let body = self.body(id);
-        let dir = self.snapshots_dir(id);
-        std::fs::create_dir_all(&dir)?;
-        let mut stamp = timestamp();
-        // Two snapshots in the same second must not collide.
-        let mut n = 1;
-        while dir.join(format!("{stamp}.md")).exists() {
-            stamp = format!("{}-{n}", timestamp());
-            n += 1;
-        }
-        std::fs::write(dir.join(format!("{stamp}.md")), body)?;
-        Ok(stamp)
-    }
-
-    pub fn delete_snapshot(&self, id: &str, name: &str) -> std::io::Result<()> {
-        std::fs::remove_file(self.snapshots_dir(id).join(format!("{name}.md")))
-    }
-
-    /// Snapshot names for a document, newest first.
-    pub fn list_snapshots(&self, id: &str) -> Vec<String> {
-        let dir = self.snapshots_dir(id);
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            return Vec::new();
-        };
-        let mut names: Vec<String> = entries
-            .flatten()
-            .filter_map(|e| {
-                let name = e.file_name().to_str()?.to_string();
-                name.strip_suffix(".md").map(|s| s.to_string())
-            })
-            .collect();
-        names.sort_by(|a, b| b.cmp(a));
-        names
-    }
-
-    /// Replace a document's text with a snapshot, after snapshotting what is
-    /// there now so that restoring is never destructive.
-    pub fn restore_snapshot(&mut self, id: &str, name: &str) -> std::io::Result<()> {
-        let path = self.snapshots_dir(id).join(format!("{name}.md"));
-        let text = std::fs::read_to_string(&path)?;
-        self.take_snapshot(id)?;
-        self.set_body(id, text);
-        Ok(())
-    }
-}
-
-/// `YYYYMMDD-HHMMSS` in UTC, without pulling in a date library.
-fn timestamp() -> String {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let (y, m, d, hh, mm, ss) = civil_from_epoch(secs);
-    format!("{y:04}{m:02}{d:02}-{hh:02}{mm:02}{ss:02}")
-}
-
-/// Render a snapshot name back as something readable.
-pub fn pretty_stamp(name: &str) -> String {
-    let base = name.split('-').collect::<Vec<_>>();
-    if base.len() < 2 || base[0].len() != 8 || base[1].len() != 6 {
-        return name.to_string();
-    }
-    let (d, t) = (base[0], base[1]);
-    format!(
-        "{}-{}-{} {}:{}:{}",
-        &d[0..4],
-        &d[4..6],
-        &d[6..8],
-        &t[0..2],
-        &t[2..4],
-        &t[4..6]
-    )
-}
-
-/// Days-from-civil, after Howard Hinnant's calendar algorithms.
-fn civil_from_epoch(secs: u64) -> (i64, u32, u32, u32, u32, u32) {
-    let days = (secs / 86_400) as i64;
-    let rem = secs % 86_400;
-    let (hh, mm, ss) = ((rem / 3600) as u32, ((rem % 3600) / 60) as u32, (rem % 60) as u32);
-
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d, hh, mm, ss)
-}
-
-pub fn count_words(s: &str) -> usize {
-    let plain = crate::markup::strip(s);
-    plain.split_whitespace().filter(|w| w.chars().any(|c| c.is_alphanumeric())).count()
-}
-
-pub fn slugify(s: &str) -> String {
-    let mut out = String::new();
-    let mut prev_dash = true;
-    for c in s.chars() {
-        if c.is_alphanumeric() {
-            for l in c.to_lowercase() {
-                out.push(l);
-            }
-            prev_dash = false;
-        } else if !prev_dash {
-            out.push('-');
-            prev_dash = true;
-        }
-    }
-    let trimmed = out.trim_matches('-').to_string();
-    let trimmed: String = trimmed.chars().take(40).collect();
-    if trimmed.is_empty() {
-        "untitled".to_string()
-    } else {
-        trimmed
     }
 }
 
@@ -764,95 +625,5 @@ mod tests {
         assert!(!p.nodes.contains_key(&child));
         let _ = std::fs::remove_dir_all(&dir);
     }
-
-    #[test]
-    fn timestamps_convert_from_epoch_correctly() {
-        // Known instants, checked against the civil calendar.
-        assert_eq!(civil_from_epoch(0), (1970, 1, 1, 0, 0, 0));
-        assert_eq!(civil_from_epoch(1_000_000_000), (2001, 9, 9, 1, 46, 40));
-        // A leap day, which is where naive date maths usually breaks.
-        assert_eq!(civil_from_epoch(1_709_164_800), (2024, 2, 29, 0, 0, 0));
-        assert_eq!(pretty_stamp("20240229-000000"), "2024-02-29 00:00:00");
-        assert_eq!(pretty_stamp("nonsense"), "nonsense");
-    }
-
-    #[test]
-    fn search_finds_titles_synopses_and_prose() {
-        let dir = scratch("search");
-        let mut p = Project::create(&dir, "T").unwrap();
-        let scene = p
-            .walk()
-            .into_iter()
-            .map(|(i, _)| i)
-            .find(|i| p.nodes[i].title == "Opening Scene")
-            .unwrap();
-        p.set_body(&scene, "The salt flats.\nNothing here.\nMore salt.".into());
-
-        let hits = p.search("salt").unwrap();
-        assert_eq!(hits.len(), 2, "two prose lines contain the word");
-        assert_eq!(hits[0].line, 1);
-        assert_eq!(hits[1].line, 3);
-
-        // Titles match too, reported as line 0.
-        let hits = p.search("research").unwrap();
-        assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].line, 0);
-
-        // Case-insensitive, and blank queries return nothing.
-        assert_eq!(p.search("SALT").unwrap().len(), 2);
-        assert!(p.search("   ").unwrap().is_empty());
-        assert!(p.search("absent").unwrap().is_empty());
-
-        // A slash-delimited query is a regular expression.
-        assert_eq!(p.search("/s[ae]lt/").unwrap().len(), 2);
-        assert_eq!(p.search("/^more/").unwrap().len(), 1);
-        // Plain text is matched literally, so metacharacters are harmless.
-        assert!(p.search("s[ae]lt").unwrap().is_empty());
-        // A broken pattern reports rather than silently finding nothing.
-        assert!(p.search("/salt(/").is_err());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn snapshots_capture_and_restore_without_losing_work() {
-        let dir = scratch("snap");
-        let mut p = Project::create(&dir, "T").unwrap();
-        let scene = p
-            .walk()
-            .into_iter()
-            .map(|(i, _)| i)
-            .find(|i| p.nodes[i].title == "Opening Scene")
-            .unwrap();
-
-        p.set_body(&scene, "First draft.".into());
-        let first = p.take_snapshot(&scene).unwrap();
-        assert_eq!(p.list_snapshots(&scene), std::slice::from_ref(&first));
-
-        // Rewrite, then go back.
-        p.set_body(&scene, "Rewritten and worse.".into());
-        p.restore_snapshot(&scene, &first).unwrap();
-        assert_eq!(p.body(&scene), "First draft.");
-
-        // Restoring snapshotted the rewrite first, so nothing was lost.
-        let all = p.list_snapshots(&scene);
-        assert_eq!(all.len(), 2, "restore should preserve the replaced text");
-        let saved: Vec<String> = all
-            .iter()
-            .map(|n| {
-                std::fs::read_to_string(p.snapshots_dir(&scene).join(format!("{n}.md"))).unwrap()
-            })
-            .collect();
-        assert!(saved.contains(&"Rewritten and worse.".to_string()));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn word_and_slug_helpers() {
-        assert_eq!(count_words("one two  three\nfour"), 4);
-        assert_eq!(count_words("--- ...   "), 0);
-        // Formatting markup is not prose and must not pad the count.
-        assert_eq!(count_words("a **bold** word\n\n\\newpage\n\n::: center\nend\n:::"), 4);
-        assert_eq!(slugify("Chapter One: The Beginning!"), "chapter-one-the-beginning");
-        assert_eq!(slugify("!!!"), "untitled");
-    }
 }
+

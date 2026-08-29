@@ -115,6 +115,7 @@ tree and types the letter `n` in the editor.
 | <kbd>Ctrl</kbd>+<kbd>F</kbd> | Search the whole project |
 | <kbd>F7</kbd> | Mouse on / off |
 | <kbd>F5</kbd> | Compile to a single Markdown file |
+| <kbd>F8</kbd> | Compile the novel template to a PDF |
 | <kbd>F6</kbd> | Toggle continuous mode |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save |
 | <kbd>Ctrl</kbd>+<kbd>Q</kbd> | Save and quit |
@@ -133,6 +134,7 @@ tree and types the letter `n` in the editor.
 | `i` | Include or exclude from compiling |
 | `c` | Compile just this subtree |
 | `v` | Snapshots of this document |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> | Book / PDF settings |
 | `d` | Delete, with a confirmation |
 | <kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd>, or `K` `J` | Reorder among siblings |
 | <kbd>Alt</kbd>+<kbd>→</kbd> <kbd>←</kbd>, or `>` `<` | Indent / outdent |
@@ -153,11 +155,13 @@ keys, or `j` and `k` to change row.
 <kbd>Esc</kbd> returns to the tree. Otherwise the editor uses the standard
 Emacs-style bindings: <kbd>Ctrl</kbd>+<kbd>A</kbd> and <kbd>Ctrl</kbd>+<kbd>E</kbd>
 for start and end of line, <kbd>Ctrl</kbd>+<kbd>W</kbd> to delete a word,
-<kbd>Ctrl</kbd>+<kbd>K</kbd> to cut to end of line, <kbd>Ctrl</kbd>+<kbd>U</kbd>
-to undo and <kbd>Ctrl</kbd>+<kbd>R</kbd> to redo.
+<kbd>Ctrl</kbd>+<kbd>K</kbd> to cut to end of line. Undo is
+<kbd>Ctrl</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>U</kbd>, redo is
+<kbd>Ctrl</kbd>+<kbd>R</kbd>.
 
 Undo works a word at a time rather than a character at a time, which is the
-right size of step for prose.
+right size of step for prose. A formatting toggle is a delete and an insert, so
+it takes two presses to walk back off.
 
 ### Formatting
 
@@ -165,14 +169,15 @@ right size of step for prose.
 | --- | --- |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> | Bold the selection, or the word under the cursor |
 | <kbd>Ctrl</kbd>+<kbd>I</kbd> | Italic — or <kbd>Tab</kbd> while text is selected |
-| <kbd>Alt</kbd>+<kbd>C</kbd> | Centre the current line |
-| <kbd>Alt</kbd>+<kbd>P</kbd> | Insert a page break |
+| <kbd>Ctrl</kbd>+<kbd>L</kbd> | Centre the current line, or every line the selection touches |
+| <kbd>Ctrl</kbd>+<kbd>P</kbd> | Insert a page break |
 
 Formatting is stored as plain Markdown in your document files: `**bold**`,
-`*italic*`, a `::: center` / `:::` fence around a centred line, and a lone
+`*italic*`, a `::: center` / `:::` fence around the centred lines, and a lone
 `\newpage` for a page break. The editor styles those spans in place and fades
 the markers, so you read the prose, not the punctuation. Pressing the same key
-again on formatted text takes the formatting back off.
+again on formatted text takes the formatting back off — <kbd>Ctrl</kbd>+<kbd>L</kbd>
+with the cursor anywhere inside a centred block lifts the whole fence.
 
 Some terminals send <kbd>Ctrl</kbd>+<kbd>I</kbd> as <kbd>Tab</kbd> and cannot
 tell the two apart. That is why <kbd>Tab</kbd> also italicises whenever text is
@@ -202,17 +207,92 @@ Formatting markup is copied through untouched, so the compiled file is valid
 Markdown that a tool like Pandoc can turn into a PDF or an EPUB — `\newpage`
 becomes a real page break, a `::: center` fence a centred block.
 
+## The book
+
+<kbd>F8</kbd> compiles the project as a novel: a print-ready PDF with the front
+matter on its own pages, chapters that open on a fresh page, running heads and
+page numbers that begin at the story.
+
+Jqln does not typeset anything itself. It writes a [Typst](https://typst.app)
+document — `<title>.typ`, next to the project — and, when the `typst` binary is
+on your `PATH`, runs it to produce `<title>.pdf`. Typst is a single ~30 MB
+binary, no TeX install; get it from <https://github.com/typst/typst/releases>
+or `brew install typst`. Without it you still get the `.typ`, which you can
+compile anywhere. The `.typ` is plain text: read it, tweak it, run
+`typst compile` on it yourself.
+
+### Front matter
+
+A top-level folder named **Front Matter** (rename it with the `front_matter_folder`
+key) is kept out of the ordinary manuscript, and its documents become the pages
+before the story — in binder order, each on its own unnumbered page. Jqln looks
+at each document's title:
+
+- one containing **title** → a title-page layout;
+- one containing **copyright** → a copyright-page layout;
+- one containing **dedication** → centred italic, no heading;
+- anything else (acknowledgements, epigraph, also-by…) → its title as a small
+  centred heading, then the prose.
+
+If there is no title or copyright document, Jqln generates one from `[book]`.
+A dedication is generated from `book.dedication` when set and no dedication
+document exists.
+
+### Settings
+
+<kbd>Ctrl</kbd>+<kbd>B</kbd> from the tree opens the book settings — the same
+fields as a small in-editor list. <kbd>Enter</kbd> edits a field, the arrow keys
+toggle the switches and cycle the trim size, <kbd>Esc</kbd> closes; save with
+<kbd>Ctrl</kbd>+<kbd>S</kbd> as usual.
+
+The fields all live in a `[book]` table in `jqln.toml`, so you can edit them
+there too:
+
+```toml
+[book]
+title = "The Salt Road"        # defaults to the project name
+subtitle = "a novel"
+author = "Your Name"
+copyright_year = 2026           # 0 = the year you compile
+copyright_holder = ""           # defaults to the author
+publisher = "Salt Flats Press"
+rights = "All rights reserved."
+dedication = "For the road."
+trim = "5.5x8.5"               # also 5x8, 5.25x8, 6x9, a5
+body_font = "Libertinus Serif"
+body_size = 11.0
+chapter_label = "Chapter"      # "" for a bare numeral
+scene_break = "•   •   •"
+running_heads = true
+chapters_on_recto = false      # true starts every chapter on a right-hand page
+```
+
+Folders become parts and chapters: a lone wrapper folder (a "Manuscript"
+holding the chapters) is unwrapped, a folder of folders is a part, a folder of
+documents is a chapter, and the documents inside are its scenes — separated in
+the PDF by the `scene_break` glyphs, or by a `* * *` / `---` line in the prose.
+A chapter folder titled plainly (`Chapter 4`, `Seven`, `XiV`) just gets its
+number; any other title is printed as a subtitle.
+
+Ordinary prose is set justified with wrapped lines reflowed. A `::: center`
+block is set as verse instead: centred, unjustified, every line break kept and
+a blank line between stanzas — so poems and song lyrics come out as written.
+
 ## The mouse
 
 Click a row in the tree to select it, a card to pick it, or anywhere in the
 text to put the cursor there — including inside a continuous flow, where
-clicking a document focuses it at the point you clicked. The wheel scrolls
-whichever pane is under the pointer.
+clicking a document focuses it at the point you clicked. Drag inside the editor
+to select a run of text, which is what <kbd>Ctrl</kbd>+<kbd>B</kbd> and the rest
+act on; the selection stays inside the editor and never spills into the tree.
+The wheel scrolls whichever pane is under the pointer.
 
 Capturing the mouse means the terminal hands those events to Jqln instead of
-handling them itself, which costs you drag-to-select-and-copy. So it is a mode,
-not a fixture: <kbd>F7</kbd> turns capture off and gives the terminal back its
-normal selection behaviour, and turns it on again when you are done.
+handling them itself. Jqln does its own click-and-drag selection, but the
+terminal's own drag-to-select-and-copy — the one that reaches your system
+clipboard — is off while capture is on. So it is a mode, not a fixture:
+<kbd>F7</kbd> turns capture off and gives the terminal back its normal selection
+behaviour, and turns it on again when you are done.
 
 ## Searching
 
@@ -262,8 +342,11 @@ session_words = 500
 
 - Windows has never been run or tested
 - Cards cannot be dragged to reorder; use the tree for that
-- Compile settings are fixed: folder titles become headings, document titles
-  do not, and the separator is a blank line
+- Markdown compile settings are fixed: folder titles become headings, document
+  titles do not, and the separator is a blank line
+- The book template has one layout. It is a generated `.typ` you can edit, but
+  the knobs Jqln exposes are just the `[book]` table
+- Emphasis does not span a line break; keep `*a phrase*` on one line
 
 ## Platforms
 

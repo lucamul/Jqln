@@ -1,6 +1,7 @@
 //! Jqln — a terminal-native writing studio for long-form prose.
 
 mod app;
+mod book;
 mod compile;
 mod markup;
 mod project;

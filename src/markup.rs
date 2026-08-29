@@ -76,6 +76,40 @@ pub fn highlights(lines: &[String]) -> Vec<Highlight> {
     out
 }
 
+/// One run of a line, once the emphasis markers have been read off. Used by
+/// exporters that need the structure rather than the raw asterisks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Segment {
+    Text(String),
+    Styled { bold: bool, italic: bool, text: String },
+}
+
+/// Break a line into plain and emphasised runs. `**x**` is bold, `*x*` italic,
+/// `***x***` both. A lone `*` or an unmatched pair stays literal.
+pub fn parse_line(line: &str) -> Vec<Segment> {
+    let mut out = Vec::new();
+    let mut last = 0;
+    for caps in inline_re().captures_iter(line) {
+        let whole = caps.get(0).unwrap();
+        if whole.start() > last {
+            out.push(Segment::Text(line[last..whole.start()].to_string()));
+        }
+        let (bold, italic, text) = if let Some(m) = caps.get(1) {
+            (true, true, m.as_str())
+        } else if let Some(m) = caps.get(2) {
+            (true, false, m.as_str())
+        } else {
+            (false, true, caps.get(3).unwrap().as_str())
+        };
+        out.push(Segment::Styled { bold, italic, text: text.to_string() });
+        last = whole.end();
+    }
+    if last < line.len() {
+        out.push(Segment::Text(line[last..].to_string()));
+    }
+    out
+}
+
 /// Toggle `marker` (`*` or `**`) around the byte range `start..end` of `line`.
 /// Returns the rewritten line and the byte range that still covers the same
 /// text, so the caller can keep it selected.
@@ -237,6 +271,26 @@ mod tests {
         // Fences on row 0 and row 2, page break on row 3. "Here" is untouched.
         let rows: Vec<usize> = hl.iter().map(|((( r, _), _), _, _)| *r).collect();
         assert_eq!(rows, vec![0, 2, 3]);
+    }
+
+    #[test]
+    fn parse_line_splits_plain_and_styled_runs() {
+        use Segment::*;
+        assert_eq!(
+            parse_line("a **bold** and *thin* end"),
+            vec![
+                Text("a ".into()),
+                Styled { bold: true, italic: false, text: "bold".into() },
+                Text(" and ".into()),
+                Styled { bold: false, italic: true, text: "thin".into() },
+                Text(" end".into()),
+            ]
+        );
+        assert_eq!(
+            parse_line("***both***"),
+            vec![Styled { bold: true, italic: true, text: "both".into() }]
+        );
+        assert_eq!(parse_line("no markup here"), vec![Text("no markup here".into())]);
     }
 
     #[test]
