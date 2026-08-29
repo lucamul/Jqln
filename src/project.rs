@@ -99,18 +99,29 @@ impl Node {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Meta {
     pub name: String,
-    /// Omitted from the manifest while it holds the default, so the common
-    /// case stays free of an awkward multi-line TOML string.
-    #[serde(default = "default_sep", skip_serializing_if = "is_default_sep")]
-    pub compile_separator: String,
 }
 
-fn default_sep() -> String {
-    "\n\n".to_string()
+/// Settings for the plain-Markdown compile (F5 / `c`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Compile {
+    /// Emit folder titles as Markdown headings, nested by depth.
+    pub folder_headings: bool,
+    /// Emit document titles as headings too. Off by default — scene names are
+    /// usually scaffolding, not part of the finished text.
+    pub document_headings: bool,
+    /// Text placed between the joined pieces. `\n\n` is a blank line.
+    pub separator: String,
 }
 
-fn is_default_sep(s: &String) -> bool {
-    s == "\n\n"
+impl Default for Compile {
+    fn default() -> Self {
+        Compile {
+            folder_headings: true,
+            document_headings: false,
+            separator: "\n\n".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,6 +206,8 @@ struct Manifest {
     #[serde(default)]
     targets: Targets,
     #[serde(default)]
+    compile: Compile,
+    #[serde(default)]
     book: Book,
     #[serde(default, rename = "node")]
     nodes: Vec<Node>,
@@ -207,6 +220,7 @@ pub struct Project {
     pub root: PathBuf,
     pub meta: Meta,
     pub targets: Targets,
+    pub compile: Compile,
     pub book: Book,
     pub nodes: HashMap<NodeId, Node>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
@@ -229,11 +243,9 @@ impl Project {
         std::fs::create_dir_all(root.join("docs"))?;
         let mut p = Project {
             root: root.to_path_buf(),
-            meta: Meta {
-                name: name.to_string(),
-                compile_separator: default_sep(),
-            },
+            meta: Meta { name: name.to_string() },
             targets: Targets::default(),
+            compile: Compile::default(),
             book: Book::default(),
             nodes: HashMap::new(),
             children: HashMap::new(),
@@ -286,6 +298,7 @@ impl Project {
             root: root.to_path_buf(),
             meta: manifest.project,
             targets: manifest.targets,
+            compile: manifest.compile,
             book: manifest.book,
             nodes,
             children,
@@ -364,6 +377,25 @@ impl Project {
         if let Some(n) = self.nodes.get_mut(id) {
             n.parent = parent.to_string();
         }
+    }
+
+    /// Move `id` to sit at `target` among its current siblings, shifting the
+    /// rest along. Returns true when the order changed.
+    pub fn move_within_parent(&mut self, id: &str, target: usize) -> bool {
+        let p = self.parent_of(id);
+        let Some(kids) = self.children.get_mut(&p) else {
+            return false;
+        };
+        let Some(from) = kids.iter().position(|c| c == id) else {
+            return false;
+        };
+        let to = target.min(kids.len().saturating_sub(1));
+        if from == to {
+            return false;
+        }
+        let node = kids.remove(from);
+        kids.insert(to, node);
+        true
     }
 
     /// Move a node among its siblings. Returns true when something moved.
@@ -482,11 +514,16 @@ impl Project {
             return b.clone();
         }
         let file = self.nodes.get(id).map(|n| n.file.clone()).unwrap_or_default();
-        let body = if file.is_empty() {
+        let mut body = if file.is_empty() {
             String::new()
         } else {
             std::fs::read_to_string(self.docs_dir().join(&file)).unwrap_or_default()
         };
+        // A file edited on Windows, or pasted from one, arrives with CRLFs.
+        // Jqln works in `\n` throughout; normalise on the way in.
+        if body.contains('\r') {
+            body = body.replace("\r\n", "\n").replace('\r', "\n");
+        }
         self.bodies.insert(id.to_string(), body.clone());
         body
     }
@@ -540,6 +577,7 @@ impl Project {
         let manifest = Manifest {
             project: self.meta.clone(),
             targets: self.targets.clone(),
+            compile: self.compile.clone(),
             book: self.book.clone(),
             nodes: ordered,
         };
@@ -581,11 +619,7 @@ mod tests {
 
         // The manifest is meant to be read and diffed by a human.
         let raw = std::fs::read_to_string(dir.join("jqln.toml")).unwrap();
-        assert!(
-            !raw.contains("compile_separator"),
-            "a default separator should stay out of the manifest, not appear as a \
-             multi-line TOML string"
-        );
+        assert!(raw.contains("[compile]"), "compile settings are written so they can be found");
         assert!(raw.contains("title = \"Opening Scene\""));
 
         let mut q = Project::open(&dir).unwrap();
@@ -629,6 +663,48 @@ mod tests {
         let removed = p.remove(&parent);
         assert_eq!(removed.len(), 2);
         assert!(!p.nodes.contains_key(&child));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn move_within_parent_places_a_node_at_an_index() {
+        let dir = scratch("reorder");
+        let mut p = Project::create(&dir, "T").unwrap();
+        let f = p.insert(ROOT, None, "F", Kind::Folder);
+        let a = p.insert(&f, None, "A", Kind::Text);
+        let b = p.insert(&f, None, "B", Kind::Text);
+        let c = p.insert(&f, None, "C", Kind::Text);
+
+        assert!(p.move_within_parent(&a, 2)); // A to the end
+        assert_eq!(p.children[&f], [b.clone(), c.clone(), a.clone()]);
+        assert!(p.move_within_parent(&a, 0)); // and back to the front
+        assert_eq!(p.children[&f], [a.clone(), b, c]);
+        assert!(!p.move_within_parent(&a, 0), "no-op returns false");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn compile_settings_persist_and_crlf_is_normalised() {
+        let dir = scratch("settings");
+        let mut p = Project::create(&dir, "T").unwrap();
+        p.compile.document_headings = true;
+        p.compile.separator = "\n\n---\n\n".into();
+        let scene = p
+            .walk()
+            .into_iter()
+            .map(|(i, _)| i)
+            .find(|i| p.nodes[i].title == "Opening Scene")
+            .unwrap();
+        // Write a raw file with Windows line endings behind Jqln's back.
+        p.set_body(&scene, "one\ntwo".into());
+        p.save().unwrap();
+        let file = p.docs_dir().join(&p.nodes[&scene].file);
+        std::fs::write(&file, "one\r\ntwo\r\n").unwrap();
+
+        let mut q = Project::open(&dir).unwrap();
+        assert!(q.compile.document_headings);
+        assert_eq!(q.compile.separator, "\n\n---\n\n");
+        assert_eq!(q.body(&scene), "one\ntwo\n", "CRLF collapsed to LF on load");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

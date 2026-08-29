@@ -85,7 +85,16 @@ pub(super) fn draw_cards(f: &mut Frame, app: &mut App, area: Rect) {
 
         let node = &app.project.nodes[id];
         let is_sel = selected.as_deref() == Some(id.as_str());
-        let border = if is_sel { ACCENT } else { DIM };
+        let is_drop_target = app.drag_card.is_some()
+            && app.drag_card.as_deref() != Some(id.as_str())
+            && app.drag_over.as_deref() == Some(id.as_str());
+        let border = if is_drop_target {
+            Color::Yellow
+        } else if is_sel {
+            ACCENT
+        } else {
+            DIM
+        };
 
         let mut title_style = Style::default().add_modifier(Modifier::BOLD);
         if !node.include {

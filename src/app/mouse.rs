@@ -21,10 +21,17 @@ impl App {
         }
     }
 
-    /// Extend the editor selection to the dragged-to point. Dragging only means
-    /// anything inside the text: a drag that strays over the binder clamps to
-    /// the editor's edge rather than selecting the tree as well.
+    /// Extend the editor selection to the dragged-to point, or — on the
+    /// corkboard — track which card is under the pointer so a drop can reorder.
     fn drag_at(&mut self, pos: Position) {
+        if self.view == View::Corkboard {
+            self.drag_over = self
+                .card_hits
+                .iter()
+                .find(|(_, r)| r.contains(pos))
+                .map(|(id, _)| id.clone());
+            return;
+        }
         if self.view != View::Editor || self.focus != Focus::Editor {
             return;
         }
@@ -67,9 +74,24 @@ impl App {
         }
     }
 
-    /// End of a drag: a click that never moved leaves an empty selection, which
-    /// would otherwise make the next Ctrl-B wrap nothing.
+    /// End of a drag. On the corkboard, drop the grabbed card where the pointer
+    /// landed; in the editor, tidy up a click that left an empty selection.
     fn release_drag(&mut self) {
+        if let (Some(from), Some(over)) = (self.drag_card.take(), self.drag_over.take()) {
+            if from != over {
+                let cards = self.cards();
+                if let Some(target) = cards.iter().position(|c| *c == over)
+                    && self.project.move_within_parent(&from, target)
+                {
+                    self.select_id(&from);
+                    self.dirty = true;
+                }
+            }
+            return;
+        }
+        self.drag_card = None;
+        self.drag_over = None;
+
         let Some(id) = self.editor_doc() else { return };
         if let Some(ta) = self.editors.get_mut(&id)
             && let Some((a, b)) = ta.selection_range()
@@ -128,9 +150,14 @@ impl App {
                 }
             }
             View::Corkboard => {
+                self.drag_over = None;
                 if let Some((id, _)) = self.card_hits.iter().find(|(_, r)| r.contains(pos)) {
                     let id = id.clone();
                     self.select_id(&id);
+                    // A press that turns into a drag will drop this card.
+                    self.drag_card = Some(id);
+                } else {
+                    self.drag_card = None;
                 }
             }
             View::Editor => {

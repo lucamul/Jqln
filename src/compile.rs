@@ -26,6 +26,16 @@ impl Default for Options {
     }
 }
 
+impl From<&crate::project::Compile> for Options {
+    fn from(c: &crate::project::Compile) -> Self {
+        Options {
+            folder_headings: c.folder_headings,
+            document_headings: c.document_headings,
+            separator: c.separator.clone(),
+        }
+    }
+}
+
 /// Compile the subtree rooted at `root`, or the whole project when `root` is
 /// `None`. Returns the assembled Markdown.
 pub fn compile(project: &mut Project, root: Option<&str>, opts: &Options) -> String {
@@ -222,6 +232,24 @@ mod tests {
         let path = compile_to_file(&mut p, None, &Options::default()).unwrap();
         assert!(path.ends_with("book.md"));
         assert!(std::fs::read_to_string(&path).unwrap().contains("Text."));
+        let _ = std::fs::remove_dir_all(&p.root);
+    }
+
+    #[test]
+    fn options_follow_the_projects_compile_settings() {
+        let mut p = scratch("opts");
+        let f = p.insert(ROOT, None, "Part", Kind::Folder);
+        let a = p.insert(&f, None, "Scene", Kind::Text);
+        p.set_body(&a, "Body.".into());
+
+        p.compile.folder_headings = false;
+        p.compile.document_headings = true;
+        p.compile.separator = "\n\n* * *\n\n".into();
+
+        let opts = Options::from(&p.compile);
+        let out = compile(&mut p, None, &opts);
+        assert!(!out.contains("# Part"), "folder headings suppressed");
+        assert!(out.contains("# Scene"), "document headings emitted");
         let _ = std::fs::remove_dir_all(&p.root);
     }
 }

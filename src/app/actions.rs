@@ -62,7 +62,7 @@ impl App {
 
     pub(super) fn compile_subtree(&mut self, id: &str) {
         self.flush();
-        let opts = crate::compile::Options::default();
+        let opts = crate::compile::Options::from(&self.project.compile);
         match crate::compile::compile_to_file(&mut self.project, Some(id), &opts) {
             Ok(p) => {
                 let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("output").to_string();
@@ -74,7 +74,7 @@ impl App {
 
     pub(super) fn do_compile(&mut self) {
         self.flush();
-        let opts = crate::compile::Options::default();
+        let opts = crate::compile::Options::from(&self.project.compile);
         match crate::compile::compile_to_file(&mut self.project, None, &opts) {
             Ok(p) => {
                 let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("output").to_string();

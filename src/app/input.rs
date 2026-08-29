@@ -6,6 +6,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 impl App {
     pub fn on_key(&mut self, key: KeyEvent) {
+        // A keystroke ends any in-progress card drag.
+        self.drag_card = None;
+        self.drag_over = None;
         // Modals swallow all input.
         if self.modal != Modal::None {
             self.modal_key(key);

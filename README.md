@@ -1,5 +1,7 @@
 # Jqln
 
+[![CI](https://github.com/lucamul/Jqln/actions/workflows/ci.yml/badge.svg)](https://github.com/lucamul/Jqln/actions/workflows/ci.yml)
+
 A terminal writing studio for long-form prose — novels, theses, screenplays,
 anything long enough that a single file stops being the right shape.
 
@@ -204,6 +206,15 @@ manuscript without touching the notes in it.
 `c` compiles only the selected subtree, writing to a file named after that
 node, so exporting a single chapter never overwrites the whole manuscript.
 
+Three knobs live in a `[compile]` table in `jqln.toml`:
+
+```toml
+[compile]
+folder_headings = true      # folder titles become "#" headings
+document_headings = false   # document titles become headings too
+separator = "\n\n"          # placed between joined pieces; "\n\n" is a blank line
+```
+
 Formatting markup is copied through untouched, so the compiled file is valid
 Markdown that a tool like Pandoc can turn into a PDF or an EPUB — `\newpage`
 becomes a real page break, a `::: center` fence a centred block.
@@ -297,7 +308,8 @@ text to put the cursor there — including inside a continuous flow, where
 clicking a document focuses it at the point you clicked. Drag inside the editor
 to select a run of text, which is what <kbd>Ctrl</kbd>+<kbd>B</kbd> and the rest
 act on; the selection stays inside the editor and never spills into the tree.
-The wheel scrolls whichever pane is under the pointer.
+On the card view, drag a card onto another to drop it into that position among
+its siblings. The wheel scrolls whichever pane is under the pointer.
 
 Capturing the mouse means the terminal hands those events to Jqln instead of
 handling them itself. Jqln does its own click-and-drag selection, but the
@@ -352,23 +364,25 @@ session_words = 500
 
 ## Not there yet
 
-- Windows has never been run or tested
-- Cards cannot be dragged to reorder; use the tree for that
-- Markdown compile settings are fixed: folder titles become headings, document
-  titles do not, and the separator is a blank line
-- The book template has one layout. It is a generated `.typ` you can edit, but
-  the knobs Jqln exposes are just the `[book]` table
-- Emphasis does not span a line break; keep `*a phrase*` on one line
+- Windows: CI runs the test suite there, but the interactive terminal
+  behaviour has never been tried on a real Windows machine (see Platforms)
+- The book compile has one built-in layout. The `[book]` table covers the usual
+  choices; deeper changes mean editing the generated `.typ`
+- Emphasis does not span a hard line break — keep `*a phrase*` on one line.
+  Soft-wrapped lines within a paragraph are fine in the book compile, which
+  rejoins them, but not in the editor's live styling
 
 ## Platforms
 
-Developed on macOS. The full test suite is also run on Linux (aarch64, Rust
-1.88) and the tree is type-checked for `x86_64-unknown-linux-gnu`, so both
-common Linux architectures are covered. The code is plain portable Rust with
-no platform-specific paths or system calls.
+Developed on macOS. CI runs the full test suite on Linux, macOS, and Windows
+(x86_64), plus the same suite on the Rust 1.88 minimum, and type-checks the
+tree for `aarch64-unknown-linux-gnu` and `x86_64-pc-windows-msvc`. The code is
+plain portable Rust: paths go through `PathBuf`, line endings are normalised to
+`\n` on load, and there are no platform-specific system calls.
 
-Windows is untested. It will most likely compile, since every dependency
-supports it, but nobody has run it there.
+Windows is now exercised by CI but nobody has sat in front of a real Windows
+terminal with it — the terminal-level behaviour (key codes, mouse capture) is
+the part CI cannot check.
 
 ## Licence
 
@@ -392,6 +406,7 @@ belongs entirely to you.
 cargo test      # unit tests plus rendering tests against a headless terminal
 cargo clippy --all-targets
 cargo check --target x86_64-unknown-linux-gnu --all-targets   # portability
+cargo check --target x86_64-pc-windows-msvc --all-targets     # Windows type-check
 
 # the suite on real Linux
 docker run --rm -v "$PWD":/w -w /w -e CARGO_TARGET_DIR=/tmp/target \

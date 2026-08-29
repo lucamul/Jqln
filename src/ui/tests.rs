@@ -350,6 +350,41 @@ fn clicking_a_card_selects_it() {
 }
 
 #[test]
+fn dragging_a_card_reorders_the_corkboard() {
+    use crate::project::Kind;
+    use crossterm::event::{MouseButton, MouseEventKind};
+    let mut app = scratch_app("card-drag");
+    let chapter = app.rows()[1].0.clone();
+    let first = app.rows()[2].0.clone(); // "Opening Scene"
+    let mid = app.project.insert(&chapter, None, "Middle", Kind::Text);
+    let last = app.project.insert(&chapter, None, "Last", Kind::Text);
+    app.view = View::Corkboard;
+    app.sel = 2;
+    render(&mut app, 100, 20);
+
+    let rect = |app: &App, id: &str| {
+        app.card_hits.iter().find(|(c, _)| c == id).map(|(_, r)| *r).unwrap()
+    };
+    let a = rect(&app, &first);
+    let c = rect(&app, &last);
+
+    // Grab the first card, drag it onto the last, release.
+    mouse(&mut app, MouseEventKind::Down(MouseButton::Left), a.x + 2, a.y + 1);
+    mouse(&mut app, MouseEventKind::Drag(MouseButton::Left), c.x + 2, c.y + 1);
+    mouse(&mut app, MouseEventKind::Up(MouseButton::Left), c.x + 2, c.y + 1);
+
+    assert_eq!(
+        app.project.children[&chapter],
+        [mid, last, first.clone()],
+        "the grabbed card moved to the drop position"
+    );
+    assert_eq!(app.selected_id().as_deref(), Some(first.as_str()));
+    assert!(app.dirty);
+    assert!(app.drag_card.is_none() && app.drag_over.is_none());
+    let _ = std::fs::remove_dir_all(&app.project.root);
+}
+
+#[test]
 fn the_wheel_scrolls_the_pane_under_the_pointer() {
     use crate::project::Kind;
     let mut app = scratch_app("mouse-wheel");
@@ -495,5 +530,32 @@ fn renders_book_settings() {
     assert!(out.contains("Trim size") && out.contains("5.5x8.5"));
     assert!(out.contains("Running heads") && out.contains("yes"));
     assert!(out.contains("enter edit"));
+    let _ = std::fs::remove_dir_all(&app.project.root);
+}
+
+#[test]
+fn a_dragged_card_marks_its_drop_target() {
+    use crate::project::Kind;
+    use crossterm::event::{MouseButton, MouseEventKind};
+    let mut app = scratch_app("card-drop-mark");
+    let chapter = app.rows()[1].0.clone();
+    let first = app.rows()[2].0.clone();
+    let last = app.project.insert(&chapter, None, "Last", Kind::Text);
+    app.view = View::Corkboard;
+    app.sel = 2;
+    render(&mut app, 100, 20);
+    let c = app.card_hits.iter().find(|(id, _)| *id == last).map(|(_, r)| *r).unwrap();
+    let a = app.card_hits.iter().find(|(id, _)| *id == first).map(|(_, r)| *r).unwrap();
+
+    mouse(&mut app, MouseEventKind::Down(MouseButton::Left), a.x + 2, a.y + 1);
+    mouse(&mut app, MouseEventKind::Drag(MouseButton::Left), c.x + 2, c.y + 1);
+    assert_eq!(app.drag_over.as_deref(), Some(last.as_str()));
+
+    let mut t = Terminal::new(TestBackend::new(100, 20)).unwrap();
+    t.draw(|f| draw(f, &mut app)).unwrap();
+    let buf = t.backend().buffer().clone();
+    // The drop-target card's top-left corner is drawn in yellow.
+    let corner = &buf[(c.x, c.y)];
+    assert_eq!(corner.fg, ratatui::style::Color::Yellow, "drop target should be highlighted");
     let _ = std::fs::remove_dir_all(&app.project.root);
 }

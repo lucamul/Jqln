@@ -104,6 +104,10 @@ pub struct App {
     pub pane_outline: Rect,
     pub pane_cards: Rect,
     pub card_hits: Vec<(NodeId, Rect)>,
+    /// The card being dragged, and the card the pointer is currently over, so
+    /// the corkboard can be reordered by dropping one card onto another.
+    pub drag_card: Option<NodeId>,
+    pub drag_over: Option<NodeId>,
     /// Screen rectangles of the documents drawn in the continuous flow.
     pub flow_hits: Vec<(NodeId, Rect)>,
     pub flow_inner: Rect,
@@ -173,6 +177,8 @@ impl App {
             pane_outline: Rect::ZERO,
             pane_cards: Rect::ZERO,
             card_hits: Vec::new(),
+            drag_card: None,
+            drag_over: None,
             flow_hits: Vec::new(),
             flow_inner: Rect::ZERO,
             flow_span_start: 0,
