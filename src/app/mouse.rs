@@ -16,7 +16,7 @@ impl App {
             MouseEventKind::ScrollUp => self.scroll_at(pos, -1),
             MouseEventKind::Down(MouseButton::Left) => self.click_at(pos),
             MouseEventKind::Drag(MouseButton::Left) => self.drag_at(pos),
-            MouseEventKind::Up(MouseButton::Left) => self.release_drag(),
+            MouseEventKind::Up(MouseButton::Left) => self.release_drag(pos),
             _ => {}
         }
     }
@@ -74,11 +74,18 @@ impl App {
         }
     }
 
-    /// End of a drag. On the corkboard, drop the grabbed card where the pointer
-    /// landed; in the editor, tidy up a click that left an empty selection.
-    fn release_drag(&mut self) {
-        if let (Some(from), Some(over)) = (self.drag_card.take(), self.drag_over.take()) {
-            if from != over {
+    /// End of a drag. On the corkboard, drop the grabbed card onto whatever the
+    /// pointer is over now; in the editor, tidy up a click that left an empty
+    /// selection.
+    fn release_drag(&mut self, pos: Position) {
+        if self.view == View::Corkboard {
+            let from = self.drag_card.take();
+            self.drag_over = None;
+            if let Some(from) = from
+                && let Some((over, _)) =
+                    self.card_hits.iter().find(|(_, r)| r.contains(pos)).cloned()
+                && over != from
+            {
                 let cards = self.cards();
                 if let Some(target) = cards.iter().position(|c| *c == over)
                     && self.project.move_within_parent(&from, target)

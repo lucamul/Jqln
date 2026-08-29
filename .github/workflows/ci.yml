@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Invoked by the release-prep workflow to validate a release branch.
+  workflow_call:
 
 permissions:
   contents: read
@@ -29,11 +31,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # The `typst` binary lets the book-compile integration test run for real;
-      # it skips itself when typst is absent, so a failure here is not fatal.
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: typst@0.13.1
+      # A `typst` binary lets the book-compile integration test run for real on
+      # Linux; the test skips itself everywhere it is absent.
+      - name: Install typst
+        if: runner.os == 'Linux'
+        run: |
+          t=typst-x86_64-unknown-linux-musl
+          curl -fsSL "https://github.com/typst/typst/releases/latest/download/$t.tar.xz" \
+            | tar -xJ -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$t" >> "$GITHUB_PATH"
       - run: cargo test --all-targets --locked
 
   lint:

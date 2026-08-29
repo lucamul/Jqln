@@ -1,0 +1,122 @@
+name: Release
+
+# Runs on every push to main. If Cargo.toml's version has no matching git tag,
+# the push is treated as a release: it tags the commit, builds binaries for the
+# supported targets, and publishes a GitHub Release with checksums and the
+# changelog section. Non-release pushes fall straight through the `check` job.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.v.outputs.release }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          version=$(grep -m1 -E '^version = ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "v$version is already tagged — nothing to release."
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "Releasing v$version."
+          fi
+
+  tag:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    # For an extra "Approve deployment" click after the merge, create a
+    # `release` environment with required reviewers and uncomment:
+    # environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
+      - run: |
+          v="v${{ needs.check.outputs.version }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$v" -m "$v"
+          git push origin "$v"
+
+  build:
+    needs: [check, tag]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu,  os: ubuntu-latest }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm }
+          - { target: x86_64-apple-darwin,       os: macos-13 }
+          - { target: aarch64-apple-darwin,      os: macos-latest }
+          - { target: x86_64-pc-windows-msvc,    os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          v="${{ needs.check.outputs.version }}"
+          name="jqln-$v-${{ matrix.target }}"
+          mkdir "$name"
+          bin=jqln
+          [ "$RUNNER_OS" = Windows ] && bin=jqln.exe
+          cp "target/${{ matrix.target }}/release/$bin" \
+             LICENSE THIRD-PARTY-NOTICES README.md CHANGELOG.md "$name/"
+          if [ "$RUNNER_OS" = Windows ]; then
+            7z a "$name.zip" "$name" > /dev/null
+          else
+            tar czf "$name.tar.gz" "$name"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jqln-${{ matrix.target }}
+          path: |
+            jqln-*.tar.gz
+            jqln-*.zip
+
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums and notes
+        run: |
+          v="${{ needs.check.outputs.version }}"
+          (cd dist && sha256sum jqln-* > SHA256SUMS)
+          awk -v ver="$v" \
+            '$0 ~ "^## \\[" ver "\\]" {f=1; next} f && /^## \[/ {exit} f' \
+            CHANGELOG.md > notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check.outputs.version }}
+          name: v${{ needs.check.outputs.version }}
+          body_path: notes.md
+          files: dist/*
+          fail_on_unmatched_files: true

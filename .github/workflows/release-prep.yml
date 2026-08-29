@@ -1,0 +1,104 @@
+name: Release prep
+
+# Push a branch named `release/X.Y.Z`. This validates it, bumps the version,
+# regenerates Cargo.lock and THIRD-PARTY-NOTICES, rolls the changelog, and opens
+# a "Release vX.Y.Z" pull request to main. Merging that PR (your approval) hands
+# off to the Release workflow, which tags and publishes.
+#
+# Requires a repository secret `RELEASE_TOKEN`: a fine-grained PAT scoped to this
+# repo with Contents: read/write, Pull requests: read/write, Workflows: write.
+# (The default GITHUB_TOKEN cannot push commits that then re-trigger CI.)
+
+on:
+  push:
+    branches: ['release/**']
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-prep-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.check.outputs.go }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - id: check
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          version="${GITHUB_REF_NAME#release/}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::branch must be release/X.Y.Z (got '$GITHUB_REF_NAME')"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # The prep commit re-triggers this workflow; only run once.
+          if [[ "$MSG" == chore\(release\):* ]]; then
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  validate:
+    needs: guard
+    uses: ./.github/workflows/ci.yml
+
+  prepare:
+    needs: [guard, validate]
+    if: needs.guard.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+
+      - name: Bump the version
+        run: |
+          sed -i -E 's/^version = "[^"]*"/version = "'"$VERSION"'"/' Cargo.toml
+          cargo metadata --format-version 1 --quiet > /dev/null   # sync Cargo.lock
+
+      - name: Regenerate third-party notices
+        run: cargo about generate about.hbs -o THIRD-PARTY-NOTICES
+
+      - name: Roll the changelog
+        run: |
+          today=$(date -u +%Y-%m-%d)
+          awk -v v="$VERSION" -v d="$today" '
+            /^## \[Unreleased\]$/ { print; print ""; print "## [" v "] - " d; next }
+            { print }
+          ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(release): prepare v$VERSION"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+
+      - name: Open or update the release PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          notes=$(awk -v v="$VERSION" \
+            '$0 ~ "^## \\[" v "\\]" {f=1; next} f && /^## \[/ {exit} f' CHANGELOG.md)
+          body=$(printf '%s\n\n---\n_Prepared automatically. Merge to tag and publish v%s._\n' "$notes" "$VERSION")
+          if gh pr view "$GITHUB_REF_NAME" --json number > /dev/null 2>&1; then
+            gh pr edit "$GITHUB_REF_NAME" --title "Release v$VERSION" --body "$body"
+          else
+            gh pr create --base main --head "$GITHUB_REF_NAME" \
+              --title "Release v$VERSION" --body "$body" --label release
+          fi

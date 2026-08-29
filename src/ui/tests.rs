@@ -375,12 +375,38 @@ fn dragging_a_card_reorders_the_corkboard() {
 
     assert_eq!(
         app.project.children[&chapter],
-        [mid, last, first.clone()],
+        [mid.clone(), last.clone(), first.clone()],
         "the grabbed card moved to the drop position"
     );
     assert_eq!(app.selected_id().as_deref(), Some(first.as_str()));
     assert!(app.dirty);
     assert!(app.drag_card.is_none() && app.drag_over.is_none());
+    let _ = std::fs::remove_dir_all(&app.project.root);
+}
+
+#[test]
+fn a_card_reorders_even_without_drag_events() {
+    // Some terminals send only Down then Up, no Drag in between.
+    use crate::project::Kind;
+    use crossterm::event::{MouseButton, MouseEventKind};
+    let mut app = scratch_app("card-drag-nodrag");
+    let chapter = app.rows()[1].0.clone();
+    let first = app.rows()[2].0.clone();
+    let mid = app.project.insert(&chapter, None, "Middle", Kind::Text);
+    let last = app.project.insert(&chapter, None, "Last", Kind::Text);
+    app.view = View::Corkboard;
+    app.sel = 2;
+    render(&mut app, 100, 20);
+    let rc = |app: &App, id: &str| {
+        app.card_hits.iter().find(|(c, _)| c == id).map(|(_, r)| *r).unwrap()
+    };
+    let a = rc(&app, &first);
+    let c = rc(&app, &last);
+
+    mouse(&mut app, MouseEventKind::Down(MouseButton::Left), a.x + 2, a.y + 1);
+    mouse(&mut app, MouseEventKind::Up(MouseButton::Left), c.x + 2, c.y + 1);
+
+    assert_eq!(app.project.children[&chapter], [mid, last, first]);
     let _ = std::fs::remove_dir_all(&app.project.root);
 }
 
