@@ -1,21 +1,228 @@
-MIT License
+# Jqln Source-Available License
 
-Copyright (c) 2026 Luca Multazzu
+**Version 1.0 — 2026-08-29**
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Copyright © 2026 Luca Multazzu
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+## 1. Definitions
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+For the purposes of this License:
+
+**"Software"** means the Jqln software, including its source code, compiled binaries, documentation, and associated materials, made available by the Copyright Holder under this License.
+
+**"Modified Version"** means any work based on or incorporating the Software in which the Software has been modified, translated, adapted, or otherwise changed.
+
+**"Internal Use"** means use of the Software by an individual or organization solely for its own purposes and not for the benefit of, or provision of functionality to, an external third party.
+
+Internal Use includes use by employees, contractors, and other personnel acting on behalf of the same organization.
+
+**"Commercial Product"** means a product or service that is offered, distributed, licensed, sold, rented, leased, or otherwise made available to third parties for consideration, or that forms a substantial part of a commercial offering.
+
+**"Distribution"** means making the Software or a Modified Version available to any third party, whether by sale, download, transfer, publication, hosting, sublicensing, bundling, or any other means.
+
+**"Commercial License"** means a separate license agreement granted by the Copyright Holder permitting uses of the Software that are not permitted by this License.
+
+---
+
+## 2. Copyright and License Grant
+
+Subject to the terms and conditions of this License, the Copyright Holder grants you a limited, non-exclusive, worldwide, royalty-free license to:
+
+1. download and install the Software;
+2. use the Software for personal purposes;
+3. use the Software for educational, academic, and research purposes;
+4. use the Software for Internal Use by an organization;
+5. inspect and study the source code;
+6. modify the Software for your own permitted use; and
+7. create Modified Versions for your own permitted use.
+
+This license grant does **not** grant any right to distribute the Software or any Modified Version to third parties.
+
+---
+
+## 3. Personal, Academic, and Internal Business Use
+
+The permissions granted under Section 2 apply regardless of whether the user or organization is a commercial entity.
+
+For the avoidance of doubt, a commercial company may use the Software free of charge for its own Internal Use.
+
+Examples of permitted use include:
+
+* an individual using the Software to write a novel;
+* a student using the Software for university work;
+* a university using the Software for teaching or research;
+* a company installing the Software on computers used by its employees;
+* a company modifying the Software to suit its internal writing workflow; and
+* a company developing internal extensions or integrations for its own use.
+
+No Commercial License is required for these uses.
+
+---
+
+## 4. Restrictions
+
+You may **not**, without a separate Commercial License or written permission from the Copyright Holder:
+
+### 4.1 Distribution
+
+Distribute, publish, sublicense, sell, rent, lease, transfer, or otherwise make the Software available to any third party.
+
+### 4.2 Modified Versions
+
+Distribute, publish, sublicense, sell, rent, lease, transfer, or otherwise make a Modified Version available to any third party.
+
+Modifications made solely for Internal Use may remain private and do not need to be disclosed to the Copyright Holder.
+
+### 4.3 Commercial Products
+
+Incorporate the Software or a substantial portion of the Software into a Commercial Product.
+
+This includes, without limitation:
+
+* bundling the Software with another commercial application;
+* embedding the Software into a commercial application;
+* incorporating the Software into a competing writing or editing application;
+* rebranding the Software and offering it as another product;
+* distributing the Software as a component of a commercial product; or
+* creating a derivative commercial application based substantially on the Software.
+
+### 4.4 Commercial Services
+
+Make the Software or its functionality available to third parties as part of a commercial hosted, cloud, SaaS, or other service.
+
+### 4.5 Resale and White-Labeling
+
+Resell, white-label, rebrand, or otherwise commercially redistribute the Software.
+
+---
+
+## 5. Modification
+
+You may modify the Software for your own permitted use.
+
+You are not required to publish or provide your modifications to the Copyright Holder.
+
+However, you may not distribute or otherwise make a Modified Version available to third parties without a separate Commercial License or written permission from the Copyright Holder.
+
+---
+
+## 6. Plugins, Extensions, and Integrations
+
+This License applies to the Software itself and to modifications that incorporate or derive from the Software.
+
+A separately developed plugin, extension, theme, or integration that merely communicates with the Software through documented interfaces and does not contain or incorporate the Software's source code is not, by itself, a Modified Version.
+
+However, distributing such a plugin or extension together with the Software, or using it to circumvent the restrictions of this License, is prohibited without appropriate authorization.
+
+The Copyright Holder may publish additional terms governing official plugin and extension APIs.
+
+---
+
+## 7. Commercial Licensing
+
+The Copyright Holder may grant commercial licenses permitting uses that are restricted by this License.
+
+Commercial licenses may include rights for:
+
+* commercial distribution;
+* commercial resale;
+* embedding in commercial products;
+* OEM distribution;
+* white-label products;
+* hosted or SaaS offerings;
+* redistribution of Modified Versions; and
+* other uses agreed upon by the parties.
+
+Commercial License terms, including fees, may be negotiated separately with the Copyright Holder.
+
+Nothing in this License requires the Copyright Holder to grant a Commercial License or to grant one on the same terms to different parties.
+
+---
+
+## 8. Contributions
+
+Unless otherwise agreed in writing, any contribution submitted to the Software is provided under the same license terms as the portion of the Software to which the contribution relates.
+
+By submitting a contribution, you represent that:
+
+1. you have the right to submit the contribution;
+2. the contribution does not knowingly violate the rights of any third party; and
+3. you grant the Copyright Holder sufficient rights to use, reproduce, modify, distribute, and license the contribution as part of the Software.
+
+The Copyright Holder may establish a separate Contributor License Agreement for contributions.
+
+---
+
+## 9. Trademarks and Branding
+
+This License does not grant permission to use the name, trademarks, logos, icons, or other branding of Jqln or the Copyright Holder.
+
+You may not represent a Modified Version as an official version of the Software.
+
+You may not use the project's name or branding in a manner that suggests endorsement, sponsorship, or official status without prior written permission.
+
+---
+
+## 10. Third-Party Components
+
+The Software may contain components that are distributed under separate licenses.
+
+Those components remain subject to their respective licenses.
+
+Nothing in this License is intended to restrict rights that you receive directly under a third-party license.
+
+A list of applicable third-party licenses is provided in the `THIRD-PARTY-NOTICES` file, where applicable.
+
+---
+
+## 11. No Warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE COPYRIGHT HOLDER DISCLAIMS ALL WARRANTIES, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
+
+---
+
+## 12. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE COPYRIGHT HOLDER SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR OTHER DAMAGES ARISING FROM OR RELATING TO THE SOFTWARE OR THIS LICENSE.
+
+---
+
+## 13. Termination
+
+Your rights under this License terminate automatically if you materially violate its terms.
+
+Upon termination, you must cease all use of the Software except to the extent that applicable law or another valid license grants you continuing rights.
+
+Termination does not affect rights properly granted to other parties before termination.
+
+Sections concerning copyright, restrictions, trademarks, warranty, liability, and other provisions that by their nature should survive termination shall survive termination.
+
+---
+
+## 14. No Transfer of Ownership
+
+This License does not transfer ownership of the Software or any intellectual property rights in the Software.
+
+The Software remains the property of the Copyright Holder and its respective licensors.
+
+---
+
+## 15. Reservation of Rights
+
+All rights not expressly granted by this License are reserved by the Copyright Holder.
+
+In particular, this License does not grant any right to commercially distribute, sublicense, sell, embed, or otherwise redistribute the Software.
+
+---
+
+## 16. Acceptance
+
+By downloading, installing, accessing, modifying, or using the Software, you agree to be bound by the terms of this License.
+
+If you do not agree to these terms, you may not use the Software.
+
+---
+
+**Copyright © 2026 Luca Multazzu. All rights reserved.**

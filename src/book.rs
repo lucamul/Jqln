@@ -13,7 +13,7 @@ mod lower;
 use crate::project::{now_year, slugify, NodeId, Project};
 use lower::{
     chapter_heading, content, front_matter_folder, raw, render_centered, render_prose, s, structure,
-    trim_f, trim_size, Item,
+    trim_f, trim_size, ChapterHead, Item,
 };
 use std::path::PathBuf;
 use std::process::Command;
@@ -152,10 +152,16 @@ fn build(project: &mut Project) -> String {
             Item::Part { title } => {
                 out.push_str(&format!("= {}\n\n", raw(&title)));
             }
-            Item::Chapter { title, scenes } => {
-                chapter += 1;
-                out.push_str(&format!("== {}\n", raw(&chapter_heading(&project.book, chapter))));
-                if let Some(sub) = title {
+            Item::Chapter { head, scenes } => {
+                let (main, subtitle) = match head {
+                    ChapterHead::Numbered(sub) => {
+                        chapter += 1;
+                        (chapter_heading(&project.book, chapter), sub)
+                    }
+                    ChapterHead::Fixed(text) => (text, None),
+                };
+                out.push_str(&format!("== {}\n", raw(&main)));
+                if let Some(sub) = subtitle {
                     out.push_str(&format!("#chapsub[{}]\n", raw(&sub)));
                 }
                 out.push('\n');
@@ -388,6 +394,33 @@ mod tests {
     }
 
     #[test]
+    fn named_chapters_are_verbatim_and_do_not_consume_a_number() {
+        let mut p = scratch("named");
+        let ms = p.insert(ROOT, None, "Manuscript", Kind::Folder);
+        let pro = p.insert(&ms, None, "Prologue", Kind::Folder);
+        p.nodes.get_mut(&pro).unwrap().heading = "Prologue".into();
+        let sp = p.insert(&pro, None, "s", Kind::Text);
+        p.set_body(&sp, "Before.".into());
+        let one = p.insert(&ms, None, "The Crossing", Kind::Folder);
+        let so = p.insert(&one, None, "s", Kind::Text);
+        p.set_body(&so, "Middle.".into());
+        let epi = p.insert(&ms, None, "After", Kind::Folder);
+        p.nodes.get_mut(&epi).unwrap().heading = "Epilogue".into();
+        let se = p.insert(&epi, None, "s", Kind::Text);
+        p.set_body(&se, "After.".into());
+
+        let doc = build(&mut p);
+        assert!(doc.contains("== Prologue\n"));
+        assert!(doc.contains("== Epilogue\n"));
+        // Only the middle folder takes a number, and it is the first one.
+        assert!(doc.contains("== Chapter One\n"));
+        assert!(!doc.contains("Chapter Two"));
+        // The descriptive folder title becomes the subtitle of that chapter.
+        assert!(doc.contains("#chapsub[The Crossing]"));
+        let _ = std::fs::remove_dir_all(&p.root);
+    }
+
+    #[test]
     fn authored_front_matter_wins_over_generated() {
         let mut p = scratch("frontmatter");
         let fm = p.insert(ROOT, None, "Front Matter", Kind::Folder);
@@ -468,4 +501,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&p.root);
     }
 }
+
+
 

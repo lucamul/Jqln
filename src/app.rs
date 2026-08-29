@@ -43,6 +43,8 @@ pub enum Prompt {
     Label,
     Keywords,
     Search,
+    /// The book-compile heading override for the selected folder.
+    ChapterHeading,
     /// Editing one text field of the book settings.
     Book(BookField),
 }
@@ -130,6 +132,11 @@ fn single_line(initial: &str) -> TextArea<'static> {
     let mut ta = TextArea::new(vec![initial.to_string()]);
     ta.set_cursor_line_style(ratatui::style::Style::default());
     ta.move_cursor(tui_textarea::CursorMove::End);
+    // A prompt pre-filled with the current value starts fully selected, so the
+    // first keystroke replaces it; an arrow key drops the selection to edit.
+    if !initial.is_empty() {
+        ta.select_all();
+    }
     ta
 }
 

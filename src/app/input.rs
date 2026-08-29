@@ -298,6 +298,10 @@ impl App {
                     .unwrap_or_default();
                 self.begin(Prompt::Keywords, &v);
             }
+            KeyCode::Char('h') => {
+                let v = self.project.nodes.get(&id).map(|n| n.heading.clone()).unwrap_or_default();
+                self.begin(Prompt::ChapterHeading, &v);
+            }
             KeyCode::Char('c') => {
                 self.compile_subtree(&id);
             }
@@ -585,6 +589,14 @@ impl App {
                 }
             }
             Prompt::Search => self.run_search(text),
+            Prompt::ChapterHeading => {
+                if let Some(id) = self.selected_id() {
+                    if let Some(n) = self.project.nodes.get_mut(&id) {
+                        n.heading = normalise_heading(&text);
+                    }
+                    self.dirty = true;
+                }
+            }
             Prompt::Book(field) => self.commit_book_field(field, text),
             Prompt::Keywords => {
                 if let Some(id) = self.selected_id() {
@@ -599,5 +611,16 @@ impl App {
                 }
             }
         }
+    }
+}
+
+/// Fold what the writer typed into the canonical stored form: nothing for the
+/// numbered default, `title` for "use the folder's own title", the text itself
+/// otherwise.
+fn normalise_heading(text: &str) -> String {
+    match text.trim().to_lowercase().as_str() {
+        "" | "numbered" | "number" => String::new(),
+        "title" | "titled" => "title".to_string(),
+        _ => text.trim().to_string(),
     }
 }

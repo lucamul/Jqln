@@ -536,3 +536,30 @@ fn book_settings_edit_toggle_and_cycle() {
     assert_eq!(q.book.title, "The Salt Road");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn h_sets_a_chapter_heading_override() {
+    let mut a = app();
+    // Row 1 is "Chapter One" (a folder).
+    a.on_key(key(KeyCode::Down));
+    let id = a.selected_id().unwrap();
+
+    a.on_key(key(KeyCode::Char('h')));
+    assert!(matches!(a.modal, Modal::Input(_)));
+    type_str(&mut a, "Prologue");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.project.nodes[&id].heading, "Prologue");
+    assert!(a.dirty);
+
+    // "title" and "numbered" fold to their canonical forms.
+    a.on_key(key(KeyCode::Char('h')));
+    type_str(&mut a, "titled");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.project.nodes[&id].heading, "title");
+
+    a.on_key(key(KeyCode::Char('h')));
+    type_str(&mut a, "numbered");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.project.nodes[&id].heading, "");
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}

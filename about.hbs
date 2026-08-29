@@ -1,0 +1,33 @@
+THIRD-PARTY NOTICES
+
+Jqln is distributed with, and links against, the third-party Rust crates listed
+below. Each remains under its own license; those licenses are reproduced in
+full after the list. Nothing in the Jqln Source-Available License restricts any
+right you receive directly under these licenses.
+
+This file is generated with `cargo about generate about.hbs -o THIRD-PARTY-NOTICES`.
+
+================================================================================
+DEPENDENCIES
+================================================================================
+{{#each licenses}}
+{{#each used_by}}
+  {{crate.name}} {{crate.version}} — {{../name}}
+{{/each}}
+{{/each}}
+
+================================================================================
+LICENSE TEXTS
+================================================================================
+{{#each licenses}}
+
+--------------------------------------------------------------------------------
+{{name}}
+--------------------------------------------------------------------------------
+Applies to:
+{{#each used_by}}
+  - {{crate.name}} {{crate.version}}
+{{/each}}
+
+{{text}}
+{{/each}}

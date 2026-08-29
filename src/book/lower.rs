@@ -2,7 +2,7 @@
 //! that are pure functions of the model, kept out of the compile orchestration.
 
 use crate::markup::Segment;
-use crate::project::{Book, Kind, NodeId, Project, ROOT};
+use crate::project::{Book, Kind, Node, NodeId, Project, ROOT};
 
 pub(super) fn front_matter_folder(project: &Project) -> Option<NodeId> {
     let want = {
@@ -25,7 +25,29 @@ pub(super) fn front_matter_folder(project: &Project) -> Option<NodeId> {
 
 pub(super) enum Item {
     Part { title: String },
-    Chapter { title: Option<String>, scenes: Vec<NodeId> },
+    Chapter { head: ChapterHead, scenes: Vec<NodeId> },
+}
+
+/// How a chapter's opening line reads.
+pub(super) enum ChapterHead {
+    /// `chapter_label` + a running number (filled in by `build`), with an
+    /// optional subtitle from the folder's own title.
+    Numbered(Option<String>),
+    /// A verbatim heading — the folder's title, or a name like "Prologue".
+    /// Carries no number and does not advance the count.
+    Fixed(String),
+}
+
+/// Read a folder's `heading` override into a `ChapterHead`.
+fn chapter_head(node: &Node) -> ChapterHead {
+    match node.heading.trim() {
+        "" | "numbered" => ChapterHead::Numbered(subtitle_of(&node.title)),
+        "title" | "titled" if !node.title.trim().is_empty() => {
+            ChapterHead::Fixed(node.title.trim().to_string())
+        }
+        "title" | "titled" => ChapterHead::Numbered(None),
+        name => ChapterHead::Fixed(name.to_string()),
+    }
 }
 
 /// Walk the tree into a flat list of parts and chapters. A single wrapper
@@ -69,10 +91,7 @@ pub(super) fn structure(project: &Project) -> Vec<Item> {
     for id in level {
         let Some(node) = project.nodes.get(&id) else { continue };
         if node.kind == Kind::Text {
-            items.push(Item::Chapter {
-                title: subtitle_of(&node.title),
-                scenes: vec![id.clone()],
-            });
+            items.push(Item::Chapter { head: chapter_head(node), scenes: vec![id.clone()] });
             continue;
         }
         let kids: Vec<NodeId> = project
@@ -90,23 +109,15 @@ pub(super) fn structure(project: &Project) -> Vec<Item> {
             items.push(Item::Part { title: node.title.clone() });
             for ch in kids {
                 let Some(cn) = project.nodes.get(&ch) else { continue };
-                if cn.kind == Kind::Folder {
-                    items.push(Item::Chapter {
-                        title: subtitle_of(&cn.title),
-                        scenes: project.text_descendants(&ch).into_iter().filter(|s| *s != ch).collect(),
-                    });
+                let scenes = if cn.kind == Kind::Folder {
+                    project.text_descendants(&ch).into_iter().filter(|s| *s != ch).collect()
                 } else {
-                    items.push(Item::Chapter {
-                        title: subtitle_of(&cn.title),
-                        scenes: vec![ch.clone()],
-                    });
-                }
+                    vec![ch.clone()]
+                };
+                items.push(Item::Chapter { head: chapter_head(cn), scenes });
             }
         } else {
-            items.push(Item::Chapter {
-                title: subtitle_of(&node.title),
-                scenes: kids,
-            });
+            items.push(Item::Chapter { head: chapter_head(node), scenes: kids });
         }
     }
     items
@@ -234,19 +245,24 @@ fn verse(lines: &[&str]) -> String {
         return String::new();
     };
     let mut out = String::new();
-    let mut prev_blank = true;
+    let mut prev_blank = true; // suppress a leading stanza gap
+    let mut stanza_start = true; // first line of the current stanza
     for line in &lines[first..=last] {
         if line.is_empty() {
-            if !prev_blank {
-                out.push_str("#parbreak()\n");
-            }
             prev_blank = true;
         } else {
-            if !prev_blank {
+            if prev_blank && !stanza_start {
+                // A blank line is a stanza break: a real vertical gap, wider
+                // than the line spacing within a stanza.
+                out.push_str("\n#v(0.9em)\n");
+                stanza_start = true;
+            }
+            if !stanza_start {
                 out.push_str(" #linebreak()\n");
             }
             out.push_str(&paragraph(line));
             prev_blank = false;
+            stanza_start = false;
         }
     }
     out
@@ -258,7 +274,7 @@ fn centered_block(lines: &[&str]) -> String {
     if inner.is_empty() {
         String::new()
     } else {
-        format!("#align(center, block[\n#set par(justify: false, first-line-indent: 0pt)\n{inner}\n])\n\n")
+        format!("#align(center, block[\n#set par(justify: false, first-line-indent: 0pt, leading: 0.62em)\n{inner}\n])\n\n")
     }
 }
 
@@ -387,9 +403,10 @@ mod tests {
     fn a_centred_block_keeps_its_line_breaks_as_verse() {
         let body = "::: center\nRoses are red,\nviolets are blue,\n\nand so, it seems, are you.\n:::";
         let out = render_prose(body);
-        // Two hard breaks inside the first stanza, a stanza gap, no line joined.
+        // One hard break inside the first stanza, a vertical gap between stanzas,
+        // and nothing joined onto one line.
         assert_eq!(out.matches("#linebreak()").count(), 1);
-        assert!(out.contains("#parbreak()"), "blank line is a stanza break");
+        assert!(out.contains("#v(0.9em)"), "blank line becomes a stanza gap");
         assert!(out.contains(r#"#"violets are blue,""#));
         assert!(!out.contains("violets are blue, and so"), "lines must not be joined");
     }
@@ -414,9 +431,31 @@ mod tests {
         let items = structure(&p);
         assert_eq!(items.len(), 2, "two chapters, manuscript wrapper unwrapped");
         match &items[1] {
-            Item::Chapter { title, .. } => assert_eq!(title.as_deref(), Some("The Reckoning")),
-            _ => panic!("expected a chapter"),
+            Item::Chapter { head: ChapterHead::Numbered(sub), .. } => {
+                assert_eq!(sub.as_deref(), Some("The Reckoning"))
+            }
+            _ => panic!("expected a numbered chapter with a subtitle"),
         }
+        let _ = std::fs::remove_dir_all(&p.root);
+    }
+
+    #[test]
+    fn heading_override_maps_to_the_right_chapter_head() {
+        let mut p = scratch("heads");
+        let ms = p.insert(ROOT, None, "Manuscript", Kind::Folder);
+        let pro = p.insert(&ms, None, "Prologue", Kind::Folder);
+        p.nodes.get_mut(&pro).unwrap().heading = "Prologue".into();
+        p.insert(&pro, None, "s", Kind::Text);
+        let one = p.insert(&ms, None, "The Salt Flats", Kind::Folder);
+        p.nodes.get_mut(&one).unwrap().heading = "title".into();
+        p.insert(&one, None, "s", Kind::Text);
+        let two = p.insert(&ms, None, "Chapter Two", Kind::Folder);
+        p.insert(&two, None, "s", Kind::Text);
+
+        let items = structure(&p);
+        assert!(matches!(items[0], Item::Chapter { head: ChapterHead::Fixed(ref t), .. } if t == "Prologue"));
+        assert!(matches!(items[1], Item::Chapter { head: ChapterHead::Fixed(ref t), .. } if t == "The Salt Flats"));
+        assert!(matches!(items[2], Item::Chapter { head: ChapterHead::Numbered(None), .. }));
         let _ = std::fs::remove_dir_all(&p.root);
     }
 }

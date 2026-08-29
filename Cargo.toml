@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 description = "A terminal-native writing studio for long-form prose"
-license = "MIT"
+license-file = "LICENSE"
 readme = "README.md"
+publish = false
 
 [dependencies]
 crossterm = "0.29"

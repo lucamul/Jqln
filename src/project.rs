@@ -59,6 +59,11 @@ pub struct Node {
     pub status: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keywords: Vec<String>,
+    /// How this folder's heading reads in the book compile: empty is the
+    /// numbered default ("Chapter One"), `title` uses the folder's own title,
+    /// and any other text is used verbatim ("Prologue", "Epilogue").
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub heading: String,
     /// Whether this node is emitted by `compile`.
     #[serde(default = "default_true")]
     pub include: bool,
@@ -83,6 +88,7 @@ impl Node {
             label: String::new(),
             status: String::new(),
             keywords: Vec::new(),
+            heading: String::new(),
             include: true,
             collapsed: false,
         }

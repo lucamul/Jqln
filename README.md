@@ -131,6 +131,7 @@ tree and types the letter `n` in the editor.
 | `n` / `f` | New document / new folder |
 | `r` / `s` | Rename / edit synopsis |
 | `t` / `l` / `w` | Status / label / keywords |
+| `h` | Chapter heading override (book compile) |
 | `i` | Include or exclude from compiling |
 | `c` | Compile just this subtree |
 | `v` | Snapshots of this document |
@@ -271,8 +272,19 @@ Folders become parts and chapters: a lone wrapper folder (a "Manuscript"
 holding the chapters) is unwrapped, a folder of folders is a part, a folder of
 documents is a chapter, and the documents inside are its scenes — separated in
 the PDF by the `scene_break` glyphs, or by a `* * *` / `---` line in the prose.
-A chapter folder titled plainly (`Chapter 4`, `Seven`, `XiV`) just gets its
-number; any other title is printed as a subtitle.
+
+By default a chapter opens with "Chapter One", "Chapter Two", and so on. A
+folder titled plainly (`Chapter 4`, `Seven`, `XiV`) just gets that number; any
+other title is printed as a subtitle beneath it. Press `h` on a chapter folder
+to override the heading:
+
+- **blank** — the numbered default;
+- **`title`** — use the folder's own title as the heading, with no number;
+- **anything else** — that word verbatim ("Prologue", "Epilogue", "Interlude").
+
+An overridden heading carries no number and does not advance the count, so a
+"Prologue" before Chapter One and an "Epilogue" after the last chapter leave
+the numbering of the real chapters untouched.
 
 Ordinary prose is set justified with wrapped lines reflowed. A `::: center`
 block is set as verse instead: centred, unjustified, every line break kept and
@@ -360,7 +372,19 @@ supports it, but nobody has run it there.
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+Jqln is **source-available**, not open source. The full terms are in
+[LICENSE](LICENSE); in short:
+
+- **Free** to download, run, study, and modify for personal use, for academic
+  and research use, and for a company's own internal use — including private
+  modifications and internal integrations. Being a commercial entity does not
+  change this.
+- **Not** free to redistribute, to sell or bundle into a commercial product,
+  to offer as a hosted or SaaS service, or to publish a modified version.
+  Those need a separate commercial licence from the copyright holder.
+
+Your writing is unaffected either way — it is plain Markdown on your disk and
+belongs entirely to you.
 
 ## Developing
 
@@ -377,3 +401,20 @@ docker run --rm -v "$PWD":/w -w /w -e CARGO_TARGET_DIR=/tmp/target \
 The rendering tests draw into an off-screen terminal buffer and assert on the
 characters that come out, so layout and wrapping are covered rather than
 merely compiled.
+
+The PDF ("book") compile shells out to [`typst`](https://typst.app); install it
+to exercise that path (`brew install typst`, or a release binary). Its
+integration test skips itself when `typst` is not on `PATH`.
+
+### Third-party notices
+
+`THIRD-PARTY-NOTICES` lists every bundled crate and its licence. Regenerate it
+after a dependency change:
+
+```sh
+cargo install cargo-about --features cli
+cargo about generate about.hbs -o THIRD-PARTY-NOTICES
+```
+
+`about.toml` holds the set of accepted licences; `cargo about` fails if a
+dependency introduces one that is not on the list.

@@ -31,6 +31,7 @@ pub(super) fn draw_input(f: &mut Frame, app: &mut App, prompt: Prompt) {
         Prompt::Label => " Label ".to_string(),
         Prompt::Keywords => " Keywords (comma separated) ".to_string(),
         Prompt::Search => " Search ".to_string(),
+        Prompt::ChapterHeading => " Heading — blank, 'title', or a name ".to_string(),
         Prompt::Book(field) => format!(" {} ", field.label()),
     };
     let area = centered(f.area(), 60, 3);
@@ -252,50 +253,42 @@ pub(super) fn draw_help(f: &mut Frame) {
         ("n / f", "new document / folder"),
         ("r / s", "rename / synopsis"),
         ("t / l / w", "status / label / keywords"),
+        ("h", "chapter heading (book)"),
         ("i", "compile include on/off"),
         ("c", "compile this subtree"),
         ("v", "snapshots"),
         ("ctrl-f", "search (text or /regex/)"),
-        ("", ""),
-        ("click", "select / place cursor"),
-        ("drag", "select text"),
-        ("wheel", "scroll pane under pointer"),
         ("d", "delete (asks first)"),
         ("alt+↑↓", "reorder siblings"),
         ("alt+→←", "indent / outdent"),
         ("", ""),
+        ("click/drag", "place cursor / select text"),
+        ("wheel", "scroll pane under pointer"),
         ("F2/F3/F4", "editor · cards · outline"),
         ("F6", "continuous mode"),
         ("ctrl+↑↓", "step between documents"),
-        ("F5", "compile to one .md file"),
-        ("F8", "compile a PDF (needs typst)"),
+        ("F5 / F8", "compile: .md file / PDF"),
         ("ctrl-b", "book / PDF settings"),
         ("F7", "mouse capture on / off"),
         ("", ""),
-        ("ctrl-s", "save"),
-        ("ctrl-q", "save and quit"),
-        ("F1 / ?", "this help"),
-        ("", ""),
+        ("ctrl-s / ctrl-q", "save / save and quit"),
         ("", "press any key to close"),
     ];
 
-    // Two columns when the terminal is wide enough, one otherwise. Split at the
-    // section break nearest the middle so a group is never torn across columns.
+    // One column when it fits vertically (keeps the blank-line grouping);
+    // otherwise two columns of the non-blank rows split down the middle.
     const KEY_W: usize = 10;
     let desc_w = rows.iter().map(|(_, v)| v.chars().count()).max().unwrap_or(0);
     let col_w = (2 + KEY_W + desc_w) as u16;
 
-    let two_col = f.area().width >= col_w * 2 + 3 && f.area().height < rows.len() as u16 + 3;
+    let one_col_fits = f.area().height >= rows.len() as u16 + 4;
+    let two_col = !one_col_fits && f.area().width >= col_w * 2 + 3;
+
+    let dense: Vec<Row>;
     let (left_rows, right_rows): (&[Row], &[Row]) = if two_col {
-        let target = rows.len() / 2;
-        let mid = rows
-            .iter()
-            .enumerate()
-            .filter(|(_, (k, v))| k.is_empty() && v.is_empty())
-            .min_by_key(|(i, _)| i.abs_diff(target))
-            .map(|(i, _)| i)
-            .unwrap_or(target);
-        (&rows[..mid], &rows[mid + 1..])
+        dense = rows.iter().copied().filter(|(k, v)| !(k.is_empty() && v.is_empty())).collect();
+        let mid = dense.len().div_ceil(2);
+        (&dense[..mid], &dense[mid..])
     } else {
         (rows, &[])
     };

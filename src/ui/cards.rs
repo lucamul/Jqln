@@ -108,7 +108,12 @@ pub(super) fn draw_cards(f: &mut Frame, app: &mut App, area: Rect) {
 
         let mut footer: Vec<Span> = Vec::new();
         if node.kind == Kind::Folder {
-            footer.push(Span::styled("folder", Style::default().fg(DIM)));
+            let tag = match node.heading.as_str() {
+                "" => "folder".to_string(),
+                "title" => "folder · title heading".to_string(),
+                name => format!("folder · “{name}”"),
+            };
+            footer.push(Span::styled(tag, Style::default().fg(DIM)));
         }
         if !node.status.is_empty() {
             if !footer.is_empty() {
