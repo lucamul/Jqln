@@ -312,6 +312,7 @@ impl App {
                 }
             }
             KeyCode::Char('n') => self.begin(Prompt::NewText, ""),
+            KeyCode::Char('N') => self.open_notes(),
             KeyCode::Char('f') => self.begin(Prompt::NewFolder, ""),
             KeyCode::Char('r') => {
                 let t = self.project.nodes.get(&id).map(|n| n.title.clone()).unwrap_or_default();
@@ -397,6 +398,12 @@ impl App {
             }
             KeyCode::Char('p') if ctrl => {
                 self.insert_page_break();
+                return;
+            }
+            // Ctrl-N here adds (or re-edits) an inline comment rather than
+            // moving the cursor down — the arrow key still does that.
+            KeyCode::Char('n') if ctrl => {
+                self.begin_comment();
                 return;
             }
             // The editor's own undo is Ctrl-U; Ctrl-Z is the reflex, so honour
@@ -567,6 +574,18 @@ impl App {
                 }
             }
             Modal::BookSettings => self.book_settings_key(key),
+            Modal::Notes => match key.code {
+                KeyCode::Esc => {
+                    self.modal = Modal::None;
+                    self.notes_target = None;
+                }
+                KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.save_notes();
+                }
+                _ => {
+                    self.notes_input.input(key);
+                }
+            },
             Modal::Spell => match key.code {
                 KeyCode::Esc => self.modal = Modal::None,
                 KeyCode::Up | KeyCode::Char('k') => {
@@ -697,6 +716,7 @@ impl App {
                 }
             }
             Prompt::Book(field) => self.commit_book_field(field, text),
+            Prompt::Comment => self.apply_comment(text),
             Prompt::Keywords => {
                 if let Some(id) = self.selected_id() {
                     if let Some(n) = self.project.nodes.get_mut(&id) {

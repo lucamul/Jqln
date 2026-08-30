@@ -9,6 +9,17 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+### Added
+- **Document notes** (`N` in the tree): a free-form note on any document or
+  folder, shown above the prose while you write and marked `✎` in the tree,
+  cards, and editor title. Stored one file per node in `notes/<id>.md`.
+- **Inline comments** (`Ctrl-N` in the editor): CriticMarkup annotations
+  anchored in the text — `{==phrase==}{>>note<<}` around a selection, or a bare
+  `{>>note<<}` at the cursor. `Ctrl-N` on an existing comment re-edits it;
+  clearing the text drops the comment but keeps the phrase it flagged.
+  Underlined in the editor, stripped by every compile, and not counted in word
+  counts.
+
 ## [1.1.0] - 2026-08-30
 
 ### Added

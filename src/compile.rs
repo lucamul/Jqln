@@ -76,6 +76,7 @@ fn emit(project: &mut Project, id: &str, depth: usize, opts: &Options, out: &mut
                 out.push(format!("{} {}", "#".repeat(level), node.title));
             }
             let body = project.body(id);
+            let body = crate::markup::without_comments(&body);
             let body = body.trim_matches('\n');
             if !body.is_empty() {
                 out.push(body.to_string());
@@ -136,6 +137,19 @@ mod tests {
 
         let out = compile(&mut p, None, &Options::default());
         assert_eq!(out, "# Part One\n\nFirst light.\n\nThen dark.\n");
+        let _ = std::fs::remove_dir_all(&p.root);
+    }
+
+    #[test]
+    fn inline_comments_never_reach_the_output() {
+        let mut p = scratch("comments");
+        let a = p.insert(ROOT, None, "Scene", Kind::Text);
+        p.set_body(
+            &a,
+            "She left{>>too abrupt?<<} early. The {==red==}{>>cut<<} door.".into(),
+        );
+        let out = compile(&mut p, None, &Options::default());
+        assert_eq!(out, "She left early. The red door.\n");
         let _ = std::fs::remove_dir_all(&p.root);
     }
 

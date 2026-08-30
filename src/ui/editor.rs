@@ -187,14 +187,19 @@ pub(super) fn draw_editor(f: &mut Frame, app: &mut App, area: Rect) {
 
     let Some(id) = app.editor_doc() else {
         // A folder is selected: show its synopsis and contents instead.
-        let title = app
-            .selected_id()
-            .and_then(|i| app.project.nodes.get(&i).map(|n| n.title.clone()))
+        let sel = app.selected_id();
+        let title = sel
+            .as_ref()
+            .and_then(|i| app.project.nodes.get(i).map(|n| n.title.clone()))
             .unwrap_or_else(|| "Nothing selected".into());
-        let synopsis = app
-            .selected_id()
-            .and_then(|i| app.project.nodes.get(&i).map(|n| n.synopsis.clone()))
+        let synopsis = sel
+            .as_ref()
+            .and_then(|i| app.project.nodes.get(i).map(|n| n.synopsis.clone()))
             .unwrap_or_default();
+        let note = match &sel {
+            Some(i) if app.project.has_note(i) => app.project.note(i),
+            _ => String::new(),
+        };
 
         let block = Block::default()
             .borders(Borders::ALL)
@@ -216,6 +221,15 @@ pub(super) fn draw_editor(f: &mut Frame, app: &mut App, area: Rect) {
         if !synopsis.is_empty() {
             lines.push(Line::from(Span::styled(synopsis, Style::default().fg(DIM))).centered());
         }
+        for l in note.lines().take(6) {
+            lines.push(
+                Line::from(Span::styled(
+                    format!("✎ {l}"),
+                    Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
+                ))
+                .centered(),
+            );
+        }
         lines.push(Line::from(""));
         lines.push(
             Line::from(Span::styled(
@@ -234,13 +248,18 @@ pub(super) fn draw_editor(f: &mut Frame, app: &mut App, area: Rect) {
     app.restyle(&id);
     let node_title = app.project.nodes[&id].title.clone();
     let synopsis = app.project.nodes[&id].synopsis.clone();
+    let note = if app.project.has_note(&id) { app.project.note(&id) } else { String::new() };
 
     // Reserve a line for the synopsis when there is one.
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border))
         .title(Span::styled(
-            format!(" {} ", node_title),
+            if note.is_empty() {
+                format!(" {node_title} ")
+            } else {
+                format!(" {node_title} ✎ ")
+            },
             Style::default()
                 .fg(if focused { ACCENT } else { Color::Reset })
                 .add_modifier(Modifier::BOLD),
@@ -248,19 +267,42 @@ pub(super) fn draw_editor(f: &mut Frame, app: &mut App, area: Rect) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let text_area = if synopsis.is_empty() {
+    // A strip above the prose: synopsis first, then up to four lines of note.
+    let syn_h = if synopsis.is_empty() { 0 } else { 2 };
+    let note_h = if note.is_empty() { 0 } else { note.lines().count().min(4) as u16 + 1 };
+    let text_area = if syn_h + note_h == 0 {
         inner
     } else {
-        let [syn, rest] =
-            Layout::vertical([Constraint::Length(2), Constraint::Min(1)]).areas(inner);
-        f.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                synopsis,
-                Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
-            )))
-            .wrap(Wrap { trim: false }),
-            syn,
-        );
+        let [head, rest] = Layout::vertical([
+            Constraint::Length(syn_h + note_h),
+            Constraint::Min(1),
+        ])
+        .areas(inner);
+        let [syn, notes] =
+            Layout::vertical([Constraint::Length(syn_h), Constraint::Length(note_h)]).areas(head);
+        if syn_h > 0 {
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    synopsis,
+                    Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
+                )))
+                .wrap(Wrap { trim: false }),
+                syn,
+            );
+        }
+        if note_h > 0 {
+            let mut nl = vec![Line::from(Span::styled(
+                "✎ notes",
+                Style::default().fg(DIM).add_modifier(Modifier::BOLD),
+            ))];
+            for l in note.lines().take(4) {
+                nl.push(Line::from(Span::styled(
+                    l.to_string(),
+                    Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
+                )));
+            }
+            f.render_widget(Paragraph::new(nl), notes);
+        }
         rest
     };
 

@@ -63,6 +63,8 @@ my-novel/
   docs/
     r4006vz-opening-scene.md    one document, prose only
     ...
+  notes/
+    r4006vz.md                  working note for that node, if any
   snapshots/
     r4006vz/20260829-143148.md  saved versions of that document
   my-novel.md                   output, written when you compile
@@ -133,6 +135,7 @@ tree and types the letter `n` in the editor.
 | <kbd>Enter</kbd> | Open the document and start writing |
 | `n` / `f` | New document / new folder |
 | `r` / `s` | Rename / edit synopsis |
+| `N` | Edit this node's notes |
 | `t` / `l` / `w` | Status / label / keywords |
 | `h` | Chapter heading override (book compile) |
 | `i` | Include or exclude from compiling |
@@ -187,6 +190,7 @@ editor.
 | <kbd>Ctrl</kbd>+<kbd>I</kbd> | Italic — or <kbd>Tab</kbd> while text is selected |
 | <kbd>Ctrl</kbd>+<kbd>L</kbd> | Centre the current line, or every line the selection touches |
 | <kbd>Ctrl</kbd>+<kbd>P</kbd> | Insert a page break |
+| <kbd>Ctrl</kbd>+<kbd>N</kbd> | Add a comment at the cursor, or around the selection; on an existing comment, re-edit it |
 
 Formatting is stored as plain Markdown in your document files: `**bold**`,
 `*italic*`, a `::: center` / `:::` fence around the centred lines, and a lone
@@ -227,6 +231,28 @@ All-caps acronyms, single letters, and words with an internal capital
 (`iPhone`, `McConnell`) are left alone. Checking is case-insensitive for a
 capitalised sentence opener, and a curly apostrophe counts the same as a
 straight one.
+
+## Notes and comments
+
+Two ways to leave yourself a message that never becomes part of the book.
+
+**Notes** are a free-form scratchpad on any node — a document *or* a folder.
+Press `N` in the tree to open the editor for the selected node's note;
+<kbd>Ctrl</kbd>+<kbd>S</kbd> saves it, <kbd>Esc</kbd> throws the edit away. A
+node with a note is marked `✎` in the tree, on its card, and in its editor
+title, and the note itself sits above the prose while you write. Notes are
+stored one file per node in `notes/<id>.md` — plain Markdown, out of the way of
+`docs/`.
+
+**Inline comments** are anchored to a spot in the text. With the cursor where
+you want it (or a phrase selected), press <kbd>Ctrl</kbd>+<kbd>N</kbd> and type.
+Selected text is wrapped as `{==the phrase==}{>>your note<<}`; with nothing
+selected you get a bare `{>>your note<<}`. The editor underlines the flagged
+phrase and fades the rest. <kbd>Ctrl</kbd>+<kbd>N</kbd> again with the cursor on
+a comment re-opens it — change the text, or clear it to drop the comment while
+keeping the phrase it flagged.
+This is [CriticMarkup](http://criticmarkup.com/), so other tools understand it
+too; every Jqln compile strips it out.
 
 ## Compiling
 
@@ -391,7 +417,8 @@ Snapshots are plain Markdown under `snapshots/`, named by date.
 ## Word counts
 
 The status bar tracks the current document, the project total, progress
-against your target, and how much you have added this session. Targets live in
+against your target, and how much you have added this session. Emphasis markers,
+structural lines, and inline comments are not counted. Targets live in
 `jqln.toml`:
 
 ```toml

@@ -28,6 +28,7 @@ pub(super) fn draw_outline(f: &mut Frame, app: &mut App, area: Rect) {
     let mut items: Vec<ListItem> = Vec::with_capacity(rows.len());
     for (id, depth) in &rows {
         let words = app.project.word_count(id);
+        let noted = app.project.has_note(id);
         let node = &app.project.nodes[id];
 
         let indent = "  ".repeat(*depth);
@@ -42,9 +43,10 @@ pub(super) fn draw_outline(f: &mut Frame, app: &mut App, area: Rect) {
         let title = format!("{indent}{}", node.title);
         let width = inner.width as usize;
         let meta = format!(
-            "{:>7}  {:<10} {}",
+            "{:>7}  {:<10} {} {}",
             if node.kind == Kind::Text { format!("{words} w") } else { String::new() },
             node.status.chars().take(10).collect::<String>(),
+            if noted { "✎" } else { " " },
             if node.include { "✓" } else { "·" },
         );
         let pad = width.saturating_sub(title.chars().count() + meta.chars().count());
