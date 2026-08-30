@@ -9,6 +9,8 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-30
+
 ### Added
 - English spell check. A bundled `en_US` dictionary underlines misspellings as
   you write — no install, no network. `Ctrl-G` on a flagged word offers
