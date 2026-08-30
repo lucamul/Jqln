@@ -1,6 +1,8 @@
 //! Jqln — a terminal-native writing studio for long-form prose.
 
 mod app;
+#[cfg(feature = "assistant")]
+mod assistant;
 mod book;
 mod clipboard;
 mod compile;
@@ -18,19 +20,40 @@ const USAGE: &str = "\
 jqln — a terminal writing studio
 
 USAGE
-    jqln <project-dir>    open a project, creating it if absent
-    jqln                  open the project in the current directory
+    jqln <project-dir>          open a project, creating it if absent
+    jqln                        open the project in the current directory
+
+OPTIONS
+    --with-ai-assistant         enable the AI assistant panel (F9) for this run
+    -h, --help                  print this help
 
 The project directory holds jqln.toml plus a docs/ folder of Markdown.
 ";
 
 fn main() {
-    let mut args = std::env::args().skip(1);
-    let first = args.next();
+    let args: Vec<String> = std::env::args().skip(1).collect();
 
-    if matches!(first.as_deref(), Some("-h") | Some("--help")) {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
         print!("{USAGE}");
         return;
+    }
+
+    let mut with_ai = false;
+    let mut positionals: Vec<&str> = Vec::new();
+    for a in &args {
+        match a.as_str() {
+            "--with-ai-assistant" => with_ai = true,
+            s if s.starts_with('-') => {
+                eprintln!("jqln: unknown option {s}\n\n{USAGE}");
+                std::process::exit(1);
+            }
+            s => positionals.push(s),
+        }
+    }
+
+    #[cfg(not(feature = "assistant"))]
+    if with_ai {
+        eprintln!("jqln: this build has no assistant (compiled with --no-default-features)");
     }
 
     // Fail with a sentence rather than a panic when there is no terminal to
@@ -40,8 +63,8 @@ fn main() {
         std::process::exit(1);
     }
 
-    let path = first.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    let explicit = std::env::args().nth(1).is_some();
+    let explicit = !positionals.is_empty();
+    let path = positionals.first().map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
 
     let project = match load_or_create(&path, explicit) {
         Ok(p) => p,
@@ -51,7 +74,7 @@ fn main() {
         }
     };
 
-    if let Err(e) = run(project) {
+    if let Err(e) = run(project, with_ai) {
         eprintln!("jqln: {e}");
         std::process::exit(1);
     }
@@ -75,9 +98,34 @@ fn load_or_create(path: &Path, explicit: bool) -> std::io::Result<Project> {
     Project::create(path, &name)
 }
 
-fn run(project: Project) -> std::io::Result<()> {
+/// Block for the next event. While the assistant is streaming a reply, wake
+/// every 60ms instead so tokens can be drained and drawn.
+#[cfg(not(feature = "assistant"))]
+fn next_event(_streaming: bool) -> std::io::Result<Option<Event>> {
+    event::read().map(Some)
+}
+
+#[cfg(feature = "assistant")]
+fn next_event(streaming: bool) -> std::io::Result<Option<Event>> {
+    if !streaming {
+        return event::read().map(Some);
+    }
+    if event::poll(std::time::Duration::from_millis(60))? {
+        event::read().map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
+fn run(project: Project, with_ai: bool) -> std::io::Result<()> {
     let mut terminal = ratatui::init();
     let mut app = App::new(project);
+    #[cfg(feature = "assistant")]
+    {
+        app.ai_available = with_ai;
+    }
+    #[cfg(not(feature = "assistant"))]
+    let _ = with_ai;
 
     // Capturing the mouse takes over the terminal's own drag-to-select, so it
     // is a mode the writer can leave with F7 rather than a permanent cost.
@@ -88,8 +136,12 @@ fn run(project: Project) -> std::io::Result<()> {
         if let Err(e) = terminal.draw(|f| ui::draw(f, &mut app)) {
             break Err(e);
         }
-        match event::read() {
-            Ok(Event::Key(k)) if k.kind == KeyEventKind::Press => {
+        #[cfg(feature = "assistant")]
+        let streaming = app.assistant.busy;
+        #[cfg(not(feature = "assistant"))]
+        let streaming = false;
+        match next_event(streaming) {
+            Ok(Some(Event::Key(k))) if k.kind == KeyEventKind::Press => {
                 // A keystroke clears any transient message from the last action.
                 app.status.clear();
                 app.on_key(k);
@@ -98,10 +150,15 @@ fn run(project: Project) -> std::io::Result<()> {
                     clipboard::copy(&text);
                 }
             }
-            Ok(Event::Mouse(m)) => app.on_mouse(m),
-            Ok(_) => {}
+            Ok(Some(Event::Mouse(m))) => app.on_mouse(m),
+            Ok(Some(_)) => {}
+            // A timed-out poll: nothing to do beyond letting the assistant
+            // drain below and the frame redraw at the top of the loop.
+            Ok(None) => {}
             Err(e) => break Err(e),
         }
+        #[cfg(feature = "assistant")]
+        app.assistant_poll();
         if app.mouse != capturing {
             let _ = set_mouse_capture(app.mouse, &mut capturing);
         }

@@ -361,10 +361,19 @@ pub(super) fn draw_help(f: &mut Frame) {
         ("F5 / F8", "compile: .md file / PDF"),
         ("ctrl-b", "book / PDF settings"),
         ("F7", "mouse capture on / off"),
+    ];
+
+    let tail: &[Row] = &[
         ("", ""),
         ("ctrl-s/q", "save / save and quit"),
         ("", "press any key to close"),
     ];
+
+    let mut all: Vec<Row> = rows.to_vec();
+    #[cfg(feature = "assistant")]
+    all.push(("F9", "assistant panel"));
+    all.extend_from_slice(tail);
+    let rows: &[Row] = &all;
 
     // One column when it fits vertically (keeps the blank-line grouping);
     // otherwise two columns of the non-blank rows split down the middle.

@@ -139,6 +139,37 @@ impl Default for Spelling {
     }
 }
 
+/// Preferences for the AI assistant panel. Whether the panel is *available* is
+/// decided by `jqln --with-ai-assistant` at launch, not here; this table only
+/// remembers the provider, model and behaviour once you use it. It round-trips
+/// through `jqln.toml` whether or not the binary carries the assistant.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Assistant {
+    /// `"anthropic"` or `"openai"`.
+    pub provider: String,
+    /// Free-text model id.
+    pub model: String,
+    /// `document` | `chapter` | `manuscript` | `selection` | `document+outline`.
+    pub default_context: String,
+    /// Let the assistant propose inline `{>>…<<}` comments.
+    pub allow_comments: bool,
+    /// Prefix on assistant-authored comments, to tell them from your own.
+    pub comment_prefix: String,
+}
+
+impl Default for Assistant {
+    fn default() -> Self {
+        Assistant {
+            provider: "anthropic".to_string(),
+            model: "claude-sonnet-5".to_string(),
+            default_context: "document".to_string(),
+            allow_comments: false,
+            comment_prefix: "AI: ".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Targets {
     #[serde(default)]
@@ -225,6 +256,8 @@ struct Manifest {
     #[serde(default)]
     spelling: Spelling,
     #[serde(default)]
+    assistant: Assistant,
+    #[serde(default)]
     book: Book,
     #[serde(default, rename = "node")]
     nodes: Vec<Node>,
@@ -239,6 +272,7 @@ pub struct Project {
     pub targets: Targets,
     pub compile: Compile,
     pub spelling: Spelling,
+    pub assistant: Assistant,
     pub book: Book,
     pub nodes: HashMap<NodeId, Node>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
@@ -274,6 +308,7 @@ impl Project {
             targets: Targets::default(),
             compile: Compile::default(),
             spelling: Spelling::default(),
+            assistant: Assistant::default(),
             book: Book::default(),
             nodes: HashMap::new(),
             children: HashMap::new(),
@@ -345,6 +380,7 @@ impl Project {
             targets: manifest.targets,
             compile: manifest.compile,
             spelling: manifest.spelling,
+            assistant: manifest.assistant,
             book: manifest.book,
             nodes,
             children,
@@ -679,6 +715,7 @@ impl Project {
             targets: self.targets.clone(),
             compile: self.compile.clone(),
             spelling: self.spelling.clone(),
+            assistant: self.assistant.clone(),
             book: self.book.clone(),
             nodes: ordered,
         };
@@ -723,12 +760,14 @@ mod tests {
         let raw = std::fs::read_to_string(dir.join("jqln.toml")).unwrap();
         assert!(raw.contains("[compile]"), "compile settings are written so they can be found");
         assert!(raw.contains("[spelling]"), "the personal word list is written so it can be edited");
+        assert!(raw.contains("[assistant]"), "assistant settings round-trip even without the feature");
         assert!(raw.contains("title = \"Opening Scene\""));
 
         let mut q = Project::open(&dir).unwrap();
         assert_eq!(q.meta.name, "Test");
         assert_eq!(q.spelling.words, ["Eldoria"]);
         assert!(q.spelling.enabled);
+        assert_eq!(q.assistant.provider, "anthropic");
         let titles: Vec<String> = q.walk().into_iter().map(|(i, _)| q.nodes[&i].title.clone()).collect();
         assert_eq!(titles, ["Manuscript", "Chapter One", "Opening Scene", "Research"]);
         assert_eq!(q.body(&scene), "Hello there world.");

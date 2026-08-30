@@ -9,6 +9,17 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+### Added
+- **Assistant panel** (`F9`) — a right-hand AI chat, Anthropic or OpenAI. Built
+  into the normal binary but inert unless launched with `jqln
+  --with-ai-assistant` (`--no-default-features` leaves it out of the build
+  entirely). Your key comes from an env var or a paste-in popup that saves it
+  to `~/.config/jqln/config.toml`. Streams replies, shows the context sent and a
+  running token/cost estimate, and (with `allow_comments`) proposes inline
+  `{>>…<<}` comments that `/apply` inserts on the current document. It never
+  rewrites prose; nothing is sent until you send a message and confirm.
+  Configured in the `[assistant]` table of `jqln.toml`.
+
 ## [1.2.0] - 2026-08-30
 
 ### Added

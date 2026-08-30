@@ -3,12 +3,16 @@
 //! `edit`, and the heavier actions (search, compile, snapshots) in `actions`.
 
 mod actions;
+#[cfg(feature = "assistant")]
+mod assistant;
 mod book_settings;
 mod edit;
 mod input;
 mod mouse;
 
 pub use book_settings::BookField;
+#[cfg(feature = "assistant")]
+pub(crate) use assistant::header as assistant_header;
 
 #[cfg(test)]
 mod tests;
@@ -65,6 +69,9 @@ pub enum Modal {
     Spell,
     /// The free-form note for the selected node.
     Notes,
+    /// Paste an API key for the assistant; saved to the global config file.
+    #[cfg(feature = "assistant")]
+    AssistantKey,
 }
 
 pub struct App {
@@ -107,6 +114,11 @@ pub struct App {
     /// Text waiting to be pushed to the system clipboard. The main loop drains
     /// it after each keystroke, where stdout is in reach.
     pub clipboard: Option<String>,
+    #[cfg(feature = "assistant")]
+    pub assistant: crate::assistant::Assistant,
+    /// Set by `jqln --with-ai-assistant`. F9 does nothing without it.
+    #[cfg(feature = "assistant")]
+    pub ai_available: bool,
     /// Column count of the card grid, set by the renderer so that up/down
     /// navigation can move by a row without the app guessing the layout.
     pub card_cols: usize,
@@ -194,6 +206,8 @@ impl App {
         let session_base = project.total_words();
         let spell = crate::spell::Spell::english(&project.spelling.words);
         let spell_on = project.spelling.enabled;
+        #[cfg(feature = "assistant")]
+        let assistant = crate::assistant::Assistant::new(&project);
         App {
             project,
             view: View::Editor,
@@ -218,6 +232,10 @@ impl App {
             notes_target: None,
             comment_edit: None,
             clipboard: None,
+            #[cfg(feature = "assistant")]
+            assistant,
+            #[cfg(feature = "assistant")]
+            ai_available: false,
             card_cols: 3,
             card_scroll: 0,
             card_root: ROOT.to_string(),
@@ -399,7 +417,11 @@ impl App {
 
     /// Cursor should only be painted in the pane that has focus.
     pub fn sync_cursor_modes(&mut self) {
-        let active = if self.focus == Focus::Editor && self.view == View::Editor {
+        #[cfg(feature = "assistant")]
+        let elsewhere = self.assistant.focused;
+        #[cfg(not(feature = "assistant"))]
+        let elsewhere = false;
+        let active = if self.focus == Focus::Editor && self.view == View::Editor && !elsewhere {
             self.editor_doc()
         } else {
             None
