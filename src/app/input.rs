@@ -14,6 +14,12 @@ impl App {
             self.modal_key(key);
             return;
         }
+        // The assistant pane, when focused, takes every key but F9.
+        #[cfg(feature = "assistant")]
+        if self.assistant.focused && key.code != KeyCode::F(9) {
+            self.assistant_key(key);
+            return;
+        }
         if self.global_key(key) {
             return;
         }
@@ -156,6 +162,11 @@ impl App {
             }
             KeyCode::F(8) => {
                 self.do_compile_book();
+                true
+            }
+            #[cfg(feature = "assistant")]
+            KeyCode::F(9) => {
+                self.assistant_toggle();
                 true
             }
             KeyCode::F(7) => {
@@ -580,6 +591,8 @@ impl App {
                 }
             }
             Modal::BookSettings => self.book_settings_key(key),
+            #[cfg(feature = "assistant")]
+            Modal::AssistantKey => self.assistant_key_input(key),
             Modal::Notes => match key.code {
                 KeyCode::Esc => {
                     self.modal = Modal::None;

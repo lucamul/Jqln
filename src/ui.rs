@@ -5,6 +5,8 @@
 //! then lays any modal on top. Each view and each overlay lives in its own
 //! submodule.
 
+#[cfg(feature = "assistant")]
+mod assistant;
 mod binder;
 mod cards;
 mod editor;
@@ -47,10 +49,30 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Modal::BookSettings => modals::draw_book_settings(f, app),
         Modal::Spell => modals::draw_spell(f, app),
         Modal::Notes => modals::draw_notes(f, app),
+        #[cfg(feature = "assistant")]
+        Modal::AssistantKey => assistant::draw_key_prompt(f, app),
     }
 }
 
 fn draw_editor_view(f: &mut Frame, app: &mut App, area: Rect) {
+    // The assistant, when open, takes a right-hand column — or, on a narrow
+    // terminal, the whole editor area.
+    #[cfg(feature = "assistant")]
+    let area = if app.assistant.open {
+        if area.width >= 96 {
+            let panel = area.width.saturating_sub(70).clamp(36, 52);
+            let [rest, right] =
+                Layout::horizontal([Constraint::Min(40), Constraint::Length(panel)]).areas(area);
+            assistant::draw(f, app, right);
+            rest
+        } else {
+            assistant::draw(f, app, area);
+            return;
+        }
+    } else {
+        area
+    };
+
     let binder_width = 34u16.min(area.width.saturating_sub(20)).max(20);
     let [left, right] =
         Layout::horizontal([Constraint::Length(binder_width), Constraint::Min(20)]).areas(area);

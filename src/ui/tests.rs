@@ -683,3 +683,28 @@ fn card_view_hints_at_f7_when_mouse_is_off() {
     let _ = std::fs::remove_dir_all(&app.project.root);
 }
 
+
+#[cfg(feature = "assistant")]
+#[test]
+fn assistant_pane_shows_the_header_and_transcript() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+    fn k(code: KeyCode) -> KeyEvent {
+        KeyEvent {
+            code,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }
+    }
+    let mut app = scratch_app("assistant");
+    app.ai_available = true;
+    app.on_key(k(KeyCode::F(9)));
+
+    let out = render(&mut app, 130, 30);
+    println!("{out}");
+    assert!(out.contains("assistant"));
+    assert!(out.contains("claude-sonnet-5"), "header names the model");
+    assert!(out.contains("/help"), "prompt hint is shown");
+    assert!(out.contains("enter sends") || out.contains("Type a message"));
+    let _ = std::fs::remove_dir_all(&app.project.root);
+}

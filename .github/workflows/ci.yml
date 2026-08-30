@@ -76,7 +76,20 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --target ${{ matrix.target }} --all-targets --locked
+      # `--no-default-features` drops the assistant's TLS stack (`ring`), which
+      # needs a C cross-toolchain. The assistant is exercised natively by the
+      # `test` job on every OS; the release build compiles it per-target on
+      # native runners.
+      - run: cargo check --target ${{ matrix.target }} --all-targets --locked --no-default-features
+
+  lean:
+    name: no-default-features
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --all-targets --locked --no-default-features
 
   notices:
     name: dependency licences

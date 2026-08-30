@@ -19,6 +19,9 @@ accepted = [
     "Unicode-DFS-2016",
     "CC0-1.0",
     "Unlicense",
+    # pulled in only by the `assistant` feature (ureq → rustls → ring → …)
+    "CDLA-Permissive-2.0",
+    "OpenSSL",
 ]
 
 # Jqln itself (publish = false) is not a third-party component.

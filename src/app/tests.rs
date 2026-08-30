@@ -819,3 +819,96 @@ fn ctrl_g_corrects_a_misspelling_and_learns_a_word() {
     let _ = std::fs::remove_dir_all(&a.project.root);
 }
 
+
+#[cfg(feature = "assistant")]
+#[test]
+fn assistant_toggles_and_runs_slash_commands() {
+    use crate::assistant::context::Scope;
+    let mut a = app();
+    a.ai_available = true;
+
+    a.on_key(key(KeyCode::F(9)));
+    assert!(a.assistant.open && a.assistant.focused);
+
+    type_str(&mut a, "/model gpt-4o");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.assistant.model, "gpt-4o");
+    assert_eq!(a.project.assistant.model, "gpt-4o");
+    assert!(a.dirty);
+
+    type_str(&mut a, "/context manuscript");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.assistant.scope, Scope::Manuscript);
+
+    type_str(&mut a, "/comments on");
+    a.on_key(key(KeyCode::Enter));
+    assert!(a.project.assistant.allow_comments);
+
+    // Esc unfocuses but keeps the pane; F9 closes it.
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.assistant.open && !a.assistant.focused);
+    a.on_key(key(KeyCode::F(9)));
+    assert!(a.assistant.focused);
+    a.on_key(key(KeyCode::F(9)));
+    assert!(!a.assistant.open);
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[cfg(feature = "assistant")]
+#[test]
+fn assistant_applies_a_comment_proposal_to_the_open_document() {
+    use crate::assistant::comments::Proposal;
+    let mut a = app();
+    a.ai_available = true;
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down)); // "Opening Scene"
+    a.on_key(key(KeyCode::Enter));
+    let id = a.editor_doc().unwrap();
+    type_str(&mut a, "The road was long and grey.");
+
+    a.on_key(key(KeyCode::F(9)));
+    a.assistant.proposals = vec![Proposal {
+        quote: "long and grey".into(),
+        note: "cliché".into(),
+    }];
+    type_str(&mut a, "/apply");
+    a.on_key(key(KeyCode::Enter));
+
+    assert_eq!(
+        a.editors[&id].lines()[0],
+        "The road was {==long and grey==}{>>AI: cliché<<}."
+    );
+    assert!(a.assistant.proposals.is_empty());
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[cfg(feature = "assistant")]
+#[test]
+fn assistant_prompts_for_a_key_when_none_is_set() {
+    let _g = crate::assistant::keyring::env_lock();
+    // Make sure no env key shadows the flow.
+    unsafe {
+        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::remove_var("OPENAI_API_KEY");
+        std::env::set_var("XDG_CONFIG_HOME", std::env::temp_dir().join("jqln-no-such-config"));
+    }
+    let mut a = app();
+    a.ai_available = true;
+    a.on_key(key(KeyCode::F(9)));
+
+    type_str(&mut a, "hello");
+    a.on_key(key(KeyCode::Enter));
+    // No key -> the paste popup opens and the message is held.
+    assert!(matches!(a.modal, Modal::AssistantKey));
+    assert_eq!(a.assistant.pending.as_deref(), Some("hello"));
+
+    // Esc cancels without saving.
+    a.on_key(key(KeyCode::Esc));
+    assert!(matches!(a.modal, Modal::None));
+    assert!(a.assistant.pending.is_none());
+
+    unsafe {
+        std::env::remove_var("XDG_CONFIG_HOME");
+    }
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}

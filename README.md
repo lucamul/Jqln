@@ -58,6 +58,12 @@ echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc
 
 To run without installing, use `cargo run --release -- <project-dir>`.
 
+The build includes the [AI assistant](#the-assistant) panel, but it stays
+inert unless you launch with `jqln --with-ai-assistant`. To leave it out of the
+binary entirely — no network code, a much smaller dependency tree — build with
+`cargo install --path . --no-default-features`.
+It is meant to be used as a light editor if you need some help fixing prose and don't yet have a real editor. However, it was a deliberate choice to have it not on by default, as this application is meant to be able to beused fully offline and privately if you need.
+
 ## Getting started
 
 ```sh
@@ -140,6 +146,7 @@ tree and types the letter `n` in the editor.
 | <kbd>F5</kbd> | Compile to a single Markdown file |
 | <kbd>F8</kbd> | Compile the novel template to a PDF |
 | <kbd>F6</kbd> | Toggle continuous mode |
+| <kbd>F9</kbd> | Assistant panel (when launched with `--with-ai-assistant`) |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save |
 | <kbd>Ctrl</kbd>+<kbd>Q</kbd> | Save and quit |
 
@@ -278,6 +285,61 @@ a comment re-opens it — change the text, or clear it to drop the comment while
 keeping the phrase it flagged.
 This is [CriticMarkup](http://criticmarkup.com/), so other tools understand it
 too; every Jqln compile strips it out.
+
+## The assistant
+
+An AI chat pane on the right of the editor. It ships in the normal build but
+does nothing until you launch with the flag:
+
+```sh
+jqln --with-ai-assistant my-novel
+```
+
+Then <kbd>F9</kbd> opens the pane (it takes the whole editor area on a narrow
+terminal). <kbd>Esc</kbd> leaves it without closing; <kbd>F9</kbd> again closes
+it. Without the flag, <kbd>F9</kbd> just says how to turn it on.
+
+**Bring your own key.** The first time you send a message without one, a popup
+asks you to paste it; it's written to `~/.config/jqln/config.toml` (locked to
+`chmod 600`) so you only do this once. `/key` re-opens that popup. If you'd
+rather, set `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` in your shell instead.
+
+Provider, model and behaviour can be set from the pane (`/provider`, `/model`,
+…) or written straight into the project's `jqln.toml`:
+
+```toml
+[assistant]
+provider = "anthropic"          # or "openai"
+model = "claude-sonnet-5"       # free text; /model lists suggestions
+default_context = "document"    # document | document+outline | chapter | manuscript | selection
+allow_comments = false          # let it propose inline {>>…<<} comments
+comment_prefix = "AI: "
+```
+
+Nothing leaves your machine until you send a message, and the first send of a
+session asks you to confirm. By default only the open document goes with it,
+plus a frame naming the project and the outline; the pane header always says
+what is attached and the running token spend. Widen or narrow that with
+`/context`. Type a message, or a command:
+
+| Command | |
+| --- | --- |
+| `/key` | paste / replace the API key |
+| `/provider anthropic\|openai` | switch provider |
+| `/context <scope>` | change what's sent (no arg cycles) |
+| `/model <id>` | set and remember the model |
+| `/comments on` / `off` | toggle inline-comment proposals |
+| `/apply` / `/apply N` / `/apply skip` | insert proposed comment(s) |
+| `/clear` | wipe the conversation |
+| `/yes` / `/no` | answer the send-to-provider prompt |
+
+`provider`, `model`, `default_context` and `allow_comments` can all be set with
+a command instead of editing the file — the change persists on the next save.
+
+The assistant never rewrites your prose. With `allow_comments` on it can end a
+reply with anchored remarks, which land as `{==phrase==}{>>AI: …<<}` on the
+current document only, and only when you run `/apply` — one edit, so one
+<kbd>Ctrl-Z</kbd> removes the batch.
 
 ## Compiling
 
@@ -496,12 +558,20 @@ belongs entirely to you.
 cargo test      # unit tests plus rendering tests against a headless terminal
 cargo clippy --all-targets
 cargo check --target x86_64-unknown-linux-gnu --all-targets   # portability
-cargo check --target x86_64-pc-windows-msvc --all-targets     # Windows type-check
+
+cargo test --no-default-features                              # the lean build
+cargo check --target x86_64-pc-windows-msvc --all-targets --no-default-features
 
 # the suite on real Linux
 docker run --rm -v "$PWD":/w -w /w -e CARGO_TARGET_DIR=/tmp/target \
   rust:1.88 cargo test
 ```
+
+The default build includes the assistant, whose TLS stack (`ureq` → `rustls` →
+`ring`) needs a C compiler for the target — fine on native runners, not for a
+cross-check, hence `--no-default-features` for the Windows type-check. The
+`--no-default-features` build is what a distro package would ship: no network
+code, ~30 fewer crates.
 
 The rendering tests draw into an off-screen terminal buffer and assert on the
 characters that come out, so layout and wrapping are covered rather than
@@ -522,7 +592,8 @@ cargo about generate about.hbs -o THIRD-PARTY-NOTICES
 ```
 
 `about.toml` holds the set of accepted licences; `cargo about` fails if a
-dependency introduces one that is not on the list.
+dependency introduces one that is not on the list. `THIRD-PARTY-NOTICES` covers
+the full (default) build, assistant included.
 
 The bundled spell-check dictionary (`assets/en_US.{aff,dic}`, SCOWL-derived) is
 not a crate, so it is noted separately in `about.hbs`; its permissive licence is
