@@ -9,6 +9,8 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-30
+
 ### Added
 - **Copy out** (`Ctrl-C` in the editor): the selection goes to the system
   clipboard via OSC 52 and the platform clipboard tool (`pbcopy` / `wl-copy` /
