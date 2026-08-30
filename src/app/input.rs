@@ -26,14 +26,53 @@ impl App {
         }
     }
 
-    /// Grid navigation across cards; everything else falls through to the
-    /// binder so `n`, `r`, `s`, `i` and `d` behave identically on the board.
+    /// The card grid. Arrows and `hjkl` move between cards; `Alt` + those (or
+    /// `K` / `J`) reorder the highlighted card among its siblings; `Enter`
+    /// descends into a folder card and `Backspace` steps back out. Everything
+    /// else falls through to the binder so `n`, `r`, `s`, `i`, `d` still work.
     fn card_key(&mut self, key: KeyEvent) {
+        let alt = key.modifiers.contains(KeyModifiers::ALT);
+
+        // Reorder the highlighted card.
+        if alt && let Some(sel) = self.selected_id() {
+            let delta = match key.code {
+                KeyCode::Up | KeyCode::Left | KeyCode::Char('k') | KeyCode::Char('h') => -1,
+                KeyCode::Down | KeyCode::Right | KeyCode::Char('j') | KeyCode::Char('l') => 1,
+                _ => 0,
+            };
+            if delta != 0 {
+                if self.project.move_vertical(&sel, delta) {
+                    self.select_id(&sel);
+                    self.dirty = true;
+                }
+                return;
+            }
+        }
+
+        if key.code == KeyCode::Backspace {
+            self.cards_ascend();
+            return;
+        }
+
         let cards = self.cards();
         if cards.is_empty() {
             self.binder_key(key);
             return;
         }
+
+        if key.code == KeyCode::Enter {
+            let is_folder = self
+                .selected_id()
+                .and_then(|s| self.project.nodes.get(&s))
+                .map(|n| n.kind == Kind::Folder)
+                .unwrap_or(false);
+            if is_folder {
+                self.cards_descend();
+                return;
+            }
+            // A text card falls through to the binder, which opens the editor.
+        }
+
         let cur = self
             .selected_id()
             .and_then(|id| cards.iter().position(|c| *c == id))
@@ -82,8 +121,9 @@ impl App {
                 self.modal = Modal::Help;
                 true
             }
-            // Some terminals bind F1 to their own help, so offer a plain key.
-            KeyCode::Char('?') => {
+            // Some terminals bind F1 to their own help, so `?` opens it too —
+            // but not while writing, where `?` is a question mark.
+            KeyCode::Char('?') if self.focus != Focus::Editor => {
                 self.modal = Modal::Help;
                 true
             }
@@ -94,18 +134,7 @@ impl App {
             KeyCode::F(3) => {
                 self.view = View::Corkboard;
                 self.focus = Focus::Binder;
-                // A folder is a container, not a card: drop onto its first
-                // child so something is actually selected on the board.
-                if let Some(id) = self.selected_id() {
-                    let is_folder =
-                        self.project.nodes.get(&id).map(|n| n.kind == Kind::Folder).unwrap_or(false);
-                    if is_folder
-                        && let Some(first) =
-                            self.project.children.get(&id).and_then(|c| c.first()).cloned()
-                        {
-                            self.select_id(&first);
-                        }
-                }
+                self.enter_cards();
                 true
             }
             KeyCode::F(4) => {
@@ -414,6 +443,26 @@ impl App {
             return;
         };
         self.ensure_editor(&id);
+
+        // Smart em-dash: a hyphen typed right after another becomes "—".
+        if key.code == KeyCode::Char('-')
+            && !ctrl
+            && !key.modifiers.contains(KeyModifiers::ALT)
+            && let Some(ta) = self.editors.get_mut(&id)
+        {
+            let (row, col) = ta.cursor();
+            let chars: Vec<char> = ta.lines()[row].chars().collect();
+            let prev = col.checked_sub(1).and_then(|i| chars.get(i));
+            let prev2 = col.checked_sub(2).and_then(|i| chars.get(i));
+            if prev == Some(&'-') && prev2 != Some(&'-') {
+                ta.delete_char();
+                ta.insert_char('—');
+                self.dirty = true;
+                self.restyle(&id);
+                return;
+            }
+        }
+
         if let Some(ta) = self.editors.get_mut(&id)
             && ta.input(key) {
                 self.dirty = true;
@@ -548,12 +597,11 @@ impl App {
                     return;
                 }
                 let kind = if prompt == Prompt::NewFolder { Kind::Folder } else { Kind::Text };
-                // A new node follows the selection: the last child of an
-                // expanded folder, or the next sibling otherwise — always just
-                // below the row the eye is on, never above it. A new *folder*
-                // refuses to nest into a folder that already holds documents:
-                // that folder is a chapter, so you want another chapter beside
-                // it, not a sub-folder inside it.
+                // The new node lands just below the row the eye is on: the
+                // first child of an expanded folder, or the next sibling
+                // otherwise. A new *folder* will not nest into a folder that
+                // already holds documents — that folder is a chapter, so you
+                // want another chapter beside it, not a sub-folder within.
                 let (parent, index) = match self.selected_id() {
                     Some(sel) => {
                         let n = self.project.nodes.get(&sel);
@@ -576,7 +624,7 @@ impl App {
                         let nest = is_open_folder
                             && !(prompt == Prompt::NewFolder && holds_documents);
                         if nest {
-                            (sel.clone(), None)
+                            (sel.clone(), Some(0))
                         } else {
                             (self.project.parent_of(&sel), Some(self.project.index_in_parent(&sel) + 1))
                         }

@@ -13,8 +13,10 @@ use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 /// the prose, so structure can be judged without reading the text.
 pub(super) fn draw_cards(f: &mut Frame, app: &mut App, area: Rect) {
     let container = app
-        .flow_container()
-        .and_then(|c| app.project.nodes.get(&c).map(|n| n.title.clone()))
+        .project
+        .nodes
+        .get(&app.card_root)
+        .map(|n| n.title.clone())
         .unwrap_or_else(|| app.project.meta.name.clone());
 
     let heading = if app.mouse {

@@ -88,10 +88,10 @@ fn new_document_goes_inside_an_open_folder() {
     let id = a.selected_id().unwrap();
     assert_eq!(a.project.nodes[&id].title, "Scene Two");
     // "Manuscript" was selected and expanded, so it becomes the parent, and the
-    // new node is appended after its existing children, never before them.
+    // new node is its first child — right under the Manuscript row.
     let parent = a.project.parent_of(&id);
     assert_eq!(a.project.nodes[&parent].title, "Manuscript");
-    assert_eq!(a.project.children[&parent].last().unwrap(), &id);
+    assert_eq!(a.project.children[&parent].first().unwrap(), &id);
     let _ = std::fs::remove_dir_all(&a.project.root);
 }
 
@@ -533,6 +533,70 @@ fn enter_inserts_a_newline_in_the_editor() {
     let _ = std::fs::remove_dir_all(&a.project.root);
 }
 
+#[test]
+fn question_mark_is_a_question_mark_while_writing() {
+    let mut a = app();
+    // From the tree, `?` opens help.
+    a.on_key(key(KeyCode::Char('?')));
+    assert!(matches!(a.modal, Modal::Help));
+    a.on_key(key(KeyCode::Esc));
+
+    // In the editor, it is text.
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Enter));
+    type_str(&mut a, "why?");
+    assert!(matches!(a.modal, Modal::None));
+    assert_eq!(a.editors[&a.editor_doc().unwrap()].lines().join(""), "why?");
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[test]
+fn a_double_hyphen_becomes_an_em_dash() {
+    let mut a = app();
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Enter));
+    type_str(&mut a, "wait -- no");
+    let id = a.editor_doc().unwrap();
+    assert_eq!(a.editors[&id].lines().join(""), "wait — no");
+
+    // A third hyphen does not undo the dash.
+    type_str(&mut a, " a---b");
+    assert!(a.editors[&id].lines().join("").ends_with("a—-b"));
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[test]
+fn cards_show_a_level_and_alt_arrows_reorder_it() {
+    use crate::project::Kind;
+    let mut a = app();
+    // Two more chapters beside "Chapter One".
+    let ms = a.rows()[0].0.clone();
+    let c1 = a.rows()[1].0.clone();
+    let c2 = a.project.insert(&ms, None, "Chapter Two", Kind::Folder);
+    a.project.insert(&c2, None, "s", Kind::Text);
+    let c3 = a.project.insert(&ms, None, "Chapter Three", Kind::Folder);
+    a.project.insert(&c3, None, "s", Kind::Text);
+
+    // On a chapter, F3 shows all the chapters.
+    a.select_id(&c2);
+    a.on_key(key(KeyCode::F(3)));
+    assert_eq!(a.card_root, ms);
+    assert_eq!(a.cards(), vec![c1.clone(), c2.clone(), c3.clone()]);
+
+    // Alt-Down pushes Chapter Two past Chapter Three.
+    a.on_key(key_mod(KeyCode::Down, KeyModifiers::ALT));
+    assert_eq!(a.cards(), vec![c1.clone(), c3.clone(), c2.clone()]);
+    assert_eq!(a.selected_id().as_deref(), Some(c2.as_str()));
+    assert!(a.dirty);
+
+    // Capital K works too, and against a terminal that has no Alt.
+    a.on_key(key(KeyCode::Char('K')));
+    assert_eq!(a.cards(), vec![c1, c2.clone(), c3]);
+    assert_eq!(a.selected_id().as_deref(), Some(c2.as_str()));
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
 
 #[test]
 fn book_settings_edit_toggle_and_cycle() {

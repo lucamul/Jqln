@@ -9,6 +9,17 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+### Added
+- Card view shows the level the selection sits on — a chapter shows all the
+  chapters. `Enter` descends into a folder card, `Backspace` steps back out.
+- Reorder in the card view with `K` / `J`, `Alt`+arrows, or drag.
+- `--` typed together becomes an em dash (`—`).
+
+### Changed
+- A new item made inside an open folder lands first (right below the folder
+  row), not last.
+- `?` is a literal question mark in the editor; `F1` still opens help there.
+
 ## [1.0.0] - 2026-08-29
 
 ### Added
