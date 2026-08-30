@@ -337,6 +337,7 @@ pub(super) fn draw_help(f: &mut Frame) {
         ("ctrl-z", "undo (redo: ctrl-r)"),
         ("ctrl-g", "spell: fix word / toggle"),
         ("ctrl-n", "add / edit a comment"),
+        ("ctrl-c", "copy selection to clipboard"),
         ("", ""),
         ("n / f", "new document / folder"),
         ("r / s", "rename / synopsis"),

@@ -104,6 +104,9 @@ pub struct App {
     /// When `Ctrl-N` lands on an existing comment, its row and span, so the
     /// commit replaces it in place instead of inserting a new one.
     pub comment_edit: Option<(usize, crate::markup::CommentHit)>,
+    /// Text waiting to be pushed to the system clipboard. The main loop drains
+    /// it after each keystroke, where stdout is in reach.
+    pub clipboard: Option<String>,
     /// Column count of the card grid, set by the renderer so that up/down
     /// navigation can move by a row without the app guessing the layout.
     pub card_cols: usize,
@@ -214,6 +217,7 @@ impl App {
             notes_input: single_line(""),
             notes_target: None,
             comment_edit: None,
+            clipboard: None,
             card_cols: 3,
             card_scroll: 0,
             card_root: ROOT.to_string(),

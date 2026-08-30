@@ -227,6 +227,31 @@ impl App {
         self.restyle(&id);
     }
 
+    /// Ctrl-C: hand the editor selection to the system clipboard. The selection
+    /// stays put — the text is read, not cut. The main loop does the actual
+    /// clipboard write once this returns.
+    pub(super) fn copy_selection(&mut self) {
+        let Some(id) = self.editor_doc() else { return };
+        let Some(ta) = self.editors.get(&id) else { return };
+        let Some(((sr, sc), (er, ec))) = ta.selection_range() else {
+            self.status = "Select some text first, then Ctrl-C".into();
+            return;
+        };
+        let lines = ta.lines();
+        let text = if sr == er {
+            let l = &lines[sr];
+            l[crate::markup::byte_index(l, sc)..crate::markup::byte_index(l, ec)].to_string()
+        } else {
+            let mut parts = vec![lines[sr][crate::markup::byte_index(&lines[sr], sc)..].to_string()];
+            parts.extend(lines[sr + 1..er].iter().cloned());
+            parts.push(lines[er][..crate::markup::byte_index(&lines[er], ec)].to_string());
+            parts.join("\n")
+        };
+        let n = text.chars().count();
+        self.clipboard = Some(text);
+        self.status = format!("Copied {n} character{}", if n == 1 { "" } else { "s" });
+    }
+
     /// Toggle a `marker` (`*` or `**`) around the selection, or the word under
     /// the cursor when nothing is selected. The affected text stays selected
     /// so the same key toggles it straight back off.

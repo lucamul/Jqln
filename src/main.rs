@@ -2,6 +2,7 @@
 
 mod app;
 mod book;
+mod clipboard;
 mod compile;
 mod markup;
 mod project;
@@ -92,6 +93,10 @@ fn run(project: Project) -> std::io::Result<()> {
                 // A keystroke clears any transient message from the last action.
                 app.status.clear();
                 app.on_key(k);
+                // A copy request is fulfilled here, where stdout is reachable.
+                if let Some(text) = app.clipboard.take() {
+                    clipboard::copy(&text);
+                }
             }
             Ok(Event::Mouse(m)) => app.on_mouse(m),
             Ok(_) => {}

@@ -2,8 +2,29 @@
 
 [![CI](https://github.com/lucamul/Jqln/actions/workflows/ci.yml/badge.svg)](https://github.com/lucamul/Jqln/actions/workflows/ci.yml)
 
+```
+    \   |   /
+     \  |  /
+---   .---.   ---
+      | O |
+---   '---'   ---
+     /  |  \
+    /   |   \
+     .-----.
+     |     |
+     | [ ] |
+     |     |
+    /=======\
+   |         |
+   |_________|
+  ~~~~~~~~~~~~~
+```
+
 A terminal writing studio for long-form prose — novels, theses, screenplays,
 anything long enough that a single file stops being the right shape.
+
+Jqln keeps a light on the structure while you are down in the words. The
+lighthouse above is what greets you on an empty editor pane.
 
 You write in small documents and arrange them in a tree. Jqln keeps the
 structure; you keep the words. Nothing is locked in: your prose lives on disk
@@ -176,6 +197,13 @@ for start and end of line, <kbd>Ctrl</kbd>+<kbd>W</kbd> to delete a word,
 Undo works a word at a time rather than a character at a time, which is the
 right size of step for prose. A formatting toggle is a delete and an insert, so
 it takes two presses to walk back off.
+
+<kbd>Ctrl</kbd>+<kbd>C</kbd> copies the selection to the system clipboard — the
+real one, so you can paste it into another program. It goes out over both an
+OSC 52 escape sequence and the platform clipboard tool (`pbcopy`, `wl-copy` /
+`xclip`, `clip`), which between them cover most terminals. If neither reaches
+your clipboard, turn mouse capture off with <kbd>F7</kbd> and select with the
+terminal instead.
 
 Typing a second `-` right after the first turns the pair into an em dash (`—`);
 <kbd>Ctrl</kbd>+<kbd>Z</kbd> once if you wanted the hyphens. `?` is a question

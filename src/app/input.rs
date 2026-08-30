@@ -406,6 +406,12 @@ impl App {
                 self.begin_comment();
                 return;
             }
+            // Ctrl-C copies the selection to the system clipboard — the OS one,
+            // not just the editor's internal yank.
+            KeyCode::Char('c') if ctrl => {
+                self.copy_selection();
+                return;
+            }
             // The editor's own undo is Ctrl-U; Ctrl-Z is the reflex, so honour
             // it too. Redo stays on Ctrl-R.
             KeyCode::Char('z') if ctrl => {
