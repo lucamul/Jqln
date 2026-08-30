@@ -124,6 +124,21 @@ impl Default for Compile {
     }
 }
 
+/// English spell checking: whether it is on, and the writer's own words —
+/// character names, places — that the dictionary should accept.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Spelling {
+    pub enabled: bool,
+    pub words: Vec<String>,
+}
+
+impl Default for Spelling {
+    fn default() -> Self {
+        Spelling { enabled: true, words: Vec::new() }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Targets {
     #[serde(default)]
@@ -208,6 +223,8 @@ struct Manifest {
     #[serde(default)]
     compile: Compile,
     #[serde(default)]
+    spelling: Spelling,
+    #[serde(default)]
     book: Book,
     #[serde(default, rename = "node")]
     nodes: Vec<Node>,
@@ -221,6 +238,7 @@ pub struct Project {
     pub meta: Meta,
     pub targets: Targets,
     pub compile: Compile,
+    pub spelling: Spelling,
     pub book: Book,
     pub nodes: HashMap<NodeId, Node>,
     pub children: HashMap<NodeId, Vec<NodeId>>,
@@ -246,6 +264,7 @@ impl Project {
             meta: Meta { name: name.to_string() },
             targets: Targets::default(),
             compile: Compile::default(),
+            spelling: Spelling::default(),
             book: Book::default(),
             nodes: HashMap::new(),
             children: HashMap::new(),
@@ -299,6 +318,7 @@ impl Project {
             meta: manifest.project,
             targets: manifest.targets,
             compile: manifest.compile,
+            spelling: manifest.spelling,
             book: manifest.book,
             nodes,
             children,
@@ -578,6 +598,7 @@ impl Project {
             project: self.meta.clone(),
             targets: self.targets.clone(),
             compile: self.compile.clone(),
+            spelling: self.spelling.clone(),
             book: self.book.clone(),
             nodes: ordered,
         };
@@ -615,15 +636,19 @@ mod tests {
             .unwrap()
             .clone();
         p.set_body(&scene, "Hello there world.".into());
+        p.spelling.words.push("Eldoria".into());
         p.save().unwrap();
 
         // The manifest is meant to be read and diffed by a human.
         let raw = std::fs::read_to_string(dir.join("jqln.toml")).unwrap();
         assert!(raw.contains("[compile]"), "compile settings are written so they can be found");
+        assert!(raw.contains("[spelling]"), "the personal word list is written so it can be edited");
         assert!(raw.contains("title = \"Opening Scene\""));
 
         let mut q = Project::open(&dir).unwrap();
         assert_eq!(q.meta.name, "Test");
+        assert_eq!(q.spelling.words, ["Eldoria"]);
+        assert!(q.spelling.enabled);
         let titles: Vec<String> = q.walk().into_iter().map(|(i, _)| q.nodes[&i].title.clone()).collect();
         assert_eq!(titles, ["Manuscript", "Chapter One", "Opening Scene", "Research"]);
         assert_eq!(q.body(&scene), "Hello there world.");

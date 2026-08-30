@@ -115,6 +115,7 @@ tree and types the letter `n` in the editor.
 | <kbd>F1</kbd> or `?` | Help |
 | <kbd>F2</kbd> / <kbd>F3</kbd> / <kbd>F4</kbd> | Editor / cards / outline |
 | <kbd>Ctrl</kbd>+<kbd>F</kbd> | Search the whole project |
+| <kbd>Ctrl</kbd>+<kbd>G</kbd> | Fix the misspelling under the cursor; from the tree, spell check on / off |
 | <kbd>F7</kbd> | Mouse on / off |
 | <kbd>F5</kbd> | Compile to a single Markdown file |
 | <kbd>F8</kbd> | Compile the novel template to a PDF |
@@ -203,6 +204,29 @@ flow, and <kbd>Ctrl</kbd>+<kbd>↑</kbd> <kbd>↓</kbd> step between documents.
 Those two override the editor's page-scroll and paragraph-movement bindings
 while continuous mode is on; paragraph movement is still on
 <kbd>Alt</kbd>+<kbd>[</kbd> and <kbd>Alt</kbd>+<kbd>]</kbd>.
+
+### Spelling
+
+An `en_US` dictionary is bundled into the binary, so spell checking works with
+nothing to install and no network. Misspelled words get a red underline as you
+write. It is on by default; <kbd>Ctrl</kbd>+<kbd>G</kbd> from the tree turns it
+off (and back on), and the status bar says `spell off` while it is.
+
+With the cursor on a flagged word, <kbd>Ctrl</kbd>+<kbd>G</kbd> opens a short
+list of corrections. Press <kbd>Enter</kbd> or a number to swap the word, or
+`a` to add it to the project's own word list — character names, place names,
+coinages. Those words live in the `[spelling]` table of `jqln.toml`:
+
+```toml
+[spelling]
+enabled = true
+words = ["Eldoria", "kessari"]
+```
+
+All-caps acronyms, single letters, and words with an internal capital
+(`iPhone`, `McConnell`) are left alone. Checking is case-insensitive for a
+capitalised sentence opener, and a curly apostrophe counts the same as a
+straight one.
 
 ## Compiling
 
@@ -447,3 +471,7 @@ cargo about generate about.hbs -o THIRD-PARTY-NOTICES
 
 `about.toml` holds the set of accepted licences; `cargo about` fails if a
 dependency introduces one that is not on the list.
+
+The bundled spell-check dictionary (`assets/en_US.{aff,dic}`, SCOWL-derived) is
+not a crate, so it is noted separately in `about.hbs`; its permissive licence is
+`assets/en_US.LICENSE.txt`.

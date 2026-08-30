@@ -45,6 +45,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Modal::Results => modals::draw_results(f, app),
         Modal::Snapshots => modals::draw_snapshots(f, app),
         Modal::BookSettings => modals::draw_book_settings(f, app),
+        Modal::Spell => modals::draw_spell(f, app),
     }
 }
 
@@ -86,6 +87,11 @@ fn draw_status(f: &mut Frame, app: &mut App, area: Rect) {
         format!("{session:+} session"),
         Style::default().fg(if session > 0 { Color::Green } else { DIM }),
     ));
+
+    if !app.spell_on {
+        spans.push(Span::styled("  ·  ", Style::default().fg(DIM)));
+        spans.push(Span::styled("spell off", Style::default().fg(DIM)));
+    }
 
     if !app.status.is_empty() {
         spans.push(Span::styled("  ·  ", Style::default().fg(DIM)));

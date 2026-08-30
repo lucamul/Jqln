@@ -9,6 +9,13 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+### Added
+- English spell check. A bundled `en_US` dictionary underlines misspellings as
+  you write — no install, no network. `Ctrl-G` on a flagged word offers
+  corrections (`Enter` / a number to apply, `a` to learn it); `Ctrl-G` from the
+  tree toggles the feature. The personal word list and the on/off state live in
+  the `[spelling]` table of `jqln.toml`.
+
 ## [1.0.1] - 2026-08-30
 
 ### Added

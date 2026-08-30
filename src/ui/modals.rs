@@ -206,6 +206,59 @@ pub(super) fn draw_book_settings(f: &mut Frame, app: &mut App) {
     );
 }
 
+pub(super) fn draw_spell(f: &mut Frame, app: &mut App) {
+    let area = centered(f.area(), 50, 14);
+    f.render_widget(Clear, area);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(ACCENT))
+        .title(Span::styled(
+            format!(" “{}” ", app.spell_word),
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let [list_area, hint] =
+        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(inner);
+
+    if app.spell_suggestions.is_empty() {
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                "No suggestions.",
+                Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
+            )),
+            list_area,
+        );
+    } else {
+        let items: Vec<ListItem> = app
+            .spell_suggestions
+            .iter()
+            .enumerate()
+            .map(|(i, w)| {
+                ListItem::new(Line::from(vec![
+                    Span::styled(format!("{:>2}  ", i + 1), Style::default().fg(DIM)),
+                    Span::styled(w.clone(), Style::default().fg(Color::Reset)),
+                ]))
+            })
+            .collect();
+        let list = List::new(items).highlight_style(
+            Style::default().bg(ACCENT).fg(Color::Black).add_modifier(Modifier::BOLD),
+        );
+        let mut state = ListState::default();
+        state.select(Some(app.spell_sel.min(app.spell_suggestions.len() - 1)));
+        f.render_stateful_widget(list, list_area, &mut state);
+    }
+
+    f.render_widget(
+        Paragraph::new(Span::styled(
+            "enter / 1-9 to replace · a to add to dictionary · esc",
+            Style::default().fg(DIM),
+        )),
+        hint,
+    );
+}
+
 pub(super) fn draw_confirm(f: &mut Frame, app: &mut App) {
     let title = app
         .selected_id()
@@ -249,6 +302,7 @@ pub(super) fn draw_help(f: &mut Frame) {
         ("ctrl-l", "centre line(s)"),
         ("ctrl-p", "page break"),
         ("ctrl-z", "undo (redo: ctrl-r)"),
+        ("ctrl-g", "spell: fix word / toggle"),
         ("", ""),
         ("n / f", "new document / folder"),
         ("r / s", "rename / synopsis"),
