@@ -7,29 +7,26 @@
      \  |  /
 ---   .---.   ---
       | O |
----   '---'   ---
-     /  |  \
-    /   |   \
-     .-----.
+---   '---'   ---        _  ____  _      _   _
+     /  |  \            | |/ __ \| |    | \ | |
+    /   |   \           | | |  | | |    |  \| |
+     .-----.        _   | | |  | | |    | . ` |
+     |     |       | |__| | |__| | |____| |\  |
+     | [ ] |        \____/ \___\_\______|_| \_|
      |     |
-     | [ ] |
-     |     |
-    /=======\
+    /=======\      a terminal writing studio for long-form prose
    |         |
    |_________|
   ~~~~~~~~~~~~~
 ```
 
-A terminal writing studio for long-form prose — novels, theses, screenplays,
-anything long enough that a single file stops being the right shape.
+Novels, theses, screenplays — anything long enough that a single file stops
+being the right shape. You write in small documents and arrange them in a
+tree; Jqln keeps a light on the structure while you keep the words. (That
+lighthouse is what greets you on an empty editor pane.)
 
-Jqln keeps a light on the structure while you are down in the words. The
-lighthouse above is what greets you on an empty editor pane.
-
-You write in small documents and arrange them in a tree. Jqln keeps the
-structure; you keep the words. Nothing is locked in: your prose lives on disk
-as ordinary Markdown files you can grep, diff, back up, and read with any
-other tool.
+Nothing is locked in: your prose lives on disk as ordinary Markdown files you
+can grep, diff, back up, and read with any other tool.
 
 ```
 ┌ The Salt Road ─────────────────┐┌ Opening Scene ───────────────────────────────────────┐
