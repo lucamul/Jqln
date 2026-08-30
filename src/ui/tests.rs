@@ -571,6 +571,38 @@ fn renders_book_settings() {
 }
 
 #[test]
+fn notes_show_in_the_tree_and_above_the_prose() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+    fn k(code: KeyCode, m: KeyModifiers) -> KeyEvent {
+        KeyEvent { code, modifiers: m, kind: KeyEventKind::Press, state: KeyEventState::NONE }
+    }
+    let none = KeyModifiers::NONE;
+
+    let mut app = scratch_app("notes");
+    app.sel = 2; // "Opening Scene"
+
+    // Write a note the way a user would: N, type, Ctrl-S.
+    app.on_key(k(KeyCode::Char('N'), none));
+    assert!(matches!(app.modal, Modal::Notes));
+    let out = render(&mut app, 100, 20);
+    assert!(out.contains("Notes — Opening Scene"));
+    assert!(out.contains("ctrl-s to save"));
+    for c in "watch the timeline here".chars() {
+        app.on_key(k(KeyCode::Char(c), none));
+    }
+    app.on_key(k(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    assert!(matches!(app.modal, Modal::None));
+
+    app.focus = Focus::Editor;
+    let out = render(&mut app, 100, 20);
+    println!("{out}");
+    assert!(out.contains("✎"), "the tree marks a noted node");
+    assert!(out.contains("✎ notes"), "the editor labels the note strip");
+    assert!(out.contains("watch the timeline here"));
+    let _ = std::fs::remove_dir_all(&app.project.root);
+}
+
+#[test]
 fn renders_spell_corrections_and_underlines_a_misspelling() {
     use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
     use ratatui::style::Color;

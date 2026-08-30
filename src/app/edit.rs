@@ -129,6 +129,104 @@ impl App {
         self.modal = Modal::None;
     }
 
+    /// Open the notes modal for the selected node (document or folder).
+    pub(super) fn open_notes(&mut self) {
+        let Some(id) = self.selected_id() else { return };
+        let existing = self.project.note(&id);
+        self.notes_input = multiline(&existing);
+        self.notes_target = Some(id);
+        self.modal = Modal::Notes;
+    }
+
+    /// Persist the notes buffer to the node it was opened for.
+    pub(super) fn save_notes(&mut self) {
+        if let Some(id) = self.notes_target.take() {
+            let text = self.notes_input.lines().join("\n");
+            self.project.set_note(&id, text);
+            self.dirty = true;
+            self.status = if self.project.has_note(&id) {
+                "Note saved".into()
+            } else {
+                "Note cleared".into()
+            };
+        }
+        self.modal = Modal::None;
+    }
+
+    /// Ctrl-N in the editor: prompt for a comment. On an existing comment this
+    /// re-edits it; otherwise it is added at the cursor or around the selection.
+    pub(super) fn begin_comment(&mut self) {
+        let Some(id) = self.editor_doc() else { return };
+        self.ensure_editor(&id);
+        let Some(ta) = self.editors.get(&id) else { return };
+        let (row, col) = ta.cursor();
+        let line = ta.lines()[row].clone();
+        match crate::markup::comment_at(&line, col) {
+            Some(hit) => {
+                let text = hit.text.clone();
+                self.comment_edit = Some((row, hit));
+                self.begin(Prompt::Comment, &text);
+            }
+            None => {
+                self.comment_edit = None;
+                self.begin(Prompt::Comment, "");
+            }
+        }
+    }
+
+    /// Commit the comment text: replace an existing marker (or delete it when
+    /// the text is cleared), or insert a new one.
+    pub(super) fn apply_comment(&mut self, text: String) {
+        let Some(id) = self.editor_doc() else {
+            self.comment_edit = None;
+            return;
+        };
+        self.ensure_editor(&id);
+        let Some(ta) = self.editors.get_mut(&id) else { return };
+
+        if let Some((row, hit)) = self.comment_edit.take() {
+            let line = ta.lines()[row].clone();
+            // Clearing a comment drops the marker but keeps the text it flagged.
+            let (from, to, replacement) = if text.is_empty() {
+                (hit.full.0, hit.full.1, hit.flagged.unwrap_or_default())
+            } else {
+                (hit.comment.0, hit.comment.1, format!("{{>>{text}<<}}"))
+            };
+            let c0 = crate::markup::char_index(&line, from) as u16;
+            let c1 = crate::markup::char_index(&line, to) as u16;
+            ta.move_cursor(CursorMove::Jump(row as u16, c0));
+            ta.start_selection();
+            ta.move_cursor(CursorMove::Jump(row as u16, c1));
+            ta.insert_str(&replacement);
+            self.dirty = true;
+            self.restyle(&id);
+            return;
+        }
+
+        if text.is_empty() {
+            return;
+        }
+
+        match ta.selection_range() {
+            Some(((sr, sc), (er, ec))) if sr == er && sc != ec => {
+                let line = ta.lines()[sr].clone();
+                let sel = &line[crate::markup::byte_index(&line, sc)
+                    ..crate::markup::byte_index(&line, ec)];
+                let wrapped = format!("{{=={sel}==}}{{>>{text}<<}}");
+                ta.move_cursor(CursorMove::Jump(sr as u16, sc as u16));
+                ta.start_selection();
+                ta.move_cursor(CursorMove::Jump(er as u16, ec as u16));
+                ta.insert_str(wrapped);
+            }
+            _ => {
+                ta.cancel_selection();
+                ta.insert_str(format!("{{>>{text}<<}}"));
+            }
+        }
+        self.dirty = true;
+        self.restyle(&id);
+    }
+
     /// Toggle a `marker` (`*` or `**`) around the selection, or the word under
     /// the cursor when nothing is selected. The affected text stays selected
     /// so the same key toggles it straight back off.

@@ -675,6 +675,88 @@ fn h_sets_a_chapter_heading_override() {
 }
 
 #[test]
+fn capital_n_edits_a_nodes_notes() {
+    let mut a = app();
+    a.on_key(key(KeyCode::Down)); // "Chapter One" (a folder — folders get notes)
+    let id = a.selected_id().unwrap();
+
+    a.on_key(key(KeyCode::Char('N')));
+    assert!(matches!(a.modal, Modal::Notes));
+    type_str(&mut a, "cut if the pacing drags");
+    a.on_key(key_mod(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    assert!(matches!(a.modal, Modal::None));
+    assert!(a.dirty);
+    assert!(a.project.has_note(&id));
+    assert_eq!(a.project.note(&id), "cut if the pacing drags");
+
+    // Esc discards an edit.
+    a.on_key(key(KeyCode::Char('N')));
+    type_str(&mut a, "XXX");
+    a.on_key(key(KeyCode::Esc));
+    assert_eq!(a.project.note(&id), "cut if the pacing drags");
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[test]
+fn ctrl_n_adds_edits_and_clears_an_inline_comment() {
+    let mut a = app();
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down)); // "Opening Scene"
+    a.on_key(key(KeyCode::Enter));
+    let id = a.editor_doc().unwrap();
+    type_str(&mut a, "The road was long.");
+
+    // No selection: a bare comment is inserted at the cursor.
+    a.on_key(key_mod(KeyCode::Char('n'), KeyModifiers::CONTROL));
+    assert!(matches!(a.modal, Modal::Input(Prompt::Comment)));
+    type_str(&mut a, "too flat?");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.editors[&id].lines()[0], "The road was long.{>>too flat?<<}");
+    assert!(a.dirty);
+
+    // Cursor sits just after the marker — Ctrl-N re-edits it.
+    a.on_key(key_mod(KeyCode::Char('n'), KeyModifiers::CONTROL));
+    assert_eq!(a.input.lines()[0], "too flat?");
+    type_str(&mut a, "fix the rhythm");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.editors[&id].lines()[0], "The road was long.{>>fix the rhythm<<}");
+
+    // Clearing the text removes the comment.
+    a.on_key(key_mod(KeyCode::Char('n'), KeyModifiers::CONTROL));
+    a.on_key(key(KeyCode::Backspace)); // the prefilled text starts selected
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.editors[&id].lines()[0], "The road was long.");
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[test]
+fn ctrl_n_wraps_a_selection_with_a_highlight() {
+    let mut a = app();
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Enter));
+    let id = a.editor_doc().unwrap();
+    type_str(&mut a, "keep the salt road");
+
+    // Select "salt" (chars 9..13) then comment it.
+    let ta = a.editors.get_mut(&id).unwrap();
+    ta.move_cursor(CursorMove::Jump(0, 9));
+    ta.start_selection();
+    ta.move_cursor(CursorMove::Jump(0, 13));
+    a.on_key(key_mod(KeyCode::Char('n'), KeyModifiers::CONTROL));
+    type_str(&mut a, "vivid");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.editors[&id].lines()[0], "keep the {==salt==}{>>vivid<<} road");
+
+    // Clearing the comment keeps the phrase it flagged.
+    a.on_key(key_mod(KeyCode::Char('n'), KeyModifiers::CONTROL));
+    a.on_key(key(KeyCode::Backspace)); // prefilled text starts selected
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.editors[&id].lines()[0], "keep the salt road");
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[test]
 fn ctrl_g_corrects_a_misspelling_and_learns_a_word() {
     let mut a = app();
     // Open "Opening Scene" and type a misspelling.

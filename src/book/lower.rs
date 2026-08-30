@@ -191,6 +191,9 @@ pub(super) fn spell(n: u32) -> String {
 /// Emphasis is line-based (as in the editor), so wrapped lines of one paragraph
 /// are joined with a space before the markers are read.
 pub(super) fn render_prose(body: &str) -> String {
+    // Inline comments never reach the page.
+    let body = crate::markup::without_comments(body);
+    let body = body.as_ref();
     let mut out = String::new();
     let mut buf: Vec<&str> = Vec::new();
     let mut center: Vec<&str> = Vec::new();
@@ -397,6 +400,14 @@ mod tests {
         assert!(out.contains("#pagebreak(weak: true)"));
         assert!(out.contains("#align(center, block["));
         assert!(out.contains("#scenebreak"));
+    }
+
+    #[test]
+    fn render_prose_drops_inline_comments() {
+        let out = render_prose("She left{>>abrupt<<} early. A {==red==}{>>cut<<} door.");
+        assert!(!out.contains("{>>"), "comment marker leaked: {out}");
+        assert!(!out.contains("{=="), "highlight marker leaked: {out}");
+        assert!(out.contains(r#"#"She left early. A red door.""#), "{out}");
     }
 
     #[test]

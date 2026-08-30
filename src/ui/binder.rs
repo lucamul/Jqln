@@ -45,6 +45,9 @@ pub(super) fn draw_binder(f: &mut Frame, app: &mut App, area: Rect) {
                 Span::styled(marker, Style::default().fg(DIM)),
                 Span::styled(node.title.clone(), style),
             ];
+            if app.project.has_note(id) {
+                spans.push(Span::styled(" ✎", Style::default().fg(DIM)));
+            }
             if !node.include {
                 spans.push(Span::styled("  ○", Style::default().fg(DIM)));
             }

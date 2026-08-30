@@ -46,6 +46,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Modal::Snapshots => modals::draw_snapshots(f, app),
         Modal::BookSettings => modals::draw_book_settings(f, app),
         Modal::Spell => modals::draw_spell(f, app),
+        Modal::Notes => modals::draw_notes(f, app),
     }
 }
 

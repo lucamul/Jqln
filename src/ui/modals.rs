@@ -33,6 +33,7 @@ pub(super) fn draw_input(f: &mut Frame, app: &mut App, prompt: Prompt) {
         Prompt::Search => " Search ".to_string(),
         Prompt::ChapterHeading => " Heading — blank, 'title', or a name ".to_string(),
         Prompt::Book(field) => format!(" {} ", field.label()),
+        Prompt::Comment => " Comment ".to_string(),
     };
     let area = centered(f.area(), 60, 3);
     f.render_widget(Clear, area);
@@ -259,6 +260,38 @@ pub(super) fn draw_spell(f: &mut Frame, app: &mut App) {
     );
 }
 
+pub(super) fn draw_notes(f: &mut Frame, app: &mut App) {
+    let title = app
+        .notes_target
+        .as_ref()
+        .and_then(|id| app.project.nodes.get(id))
+        .map(|n| n.title.clone())
+        .unwrap_or_default();
+
+    let area = centered(f.area(), 66, 18);
+    f.render_widget(Clear, area);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(ACCENT))
+        .title(Span::styled(
+            format!(" Notes — {title} "),
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let [edit_area, hint] =
+        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(inner);
+    f.render_widget(&app.notes_input, edit_area);
+    f.render_widget(
+        Paragraph::new(Span::styled(
+            "ctrl-s to save · esc to discard",
+            Style::default().fg(DIM),
+        )),
+        hint,
+    );
+}
+
 pub(super) fn draw_confirm(f: &mut Frame, app: &mut App) {
     let title = app
         .selected_id()
@@ -303,9 +336,11 @@ pub(super) fn draw_help(f: &mut Frame) {
         ("ctrl-p", "page break"),
         ("ctrl-z", "undo (redo: ctrl-r)"),
         ("ctrl-g", "spell: fix word / toggle"),
+        ("ctrl-n", "add / edit a comment"),
         ("", ""),
         ("n / f", "new document / folder"),
         ("r / s", "rename / synopsis"),
+        ("N", "edit notes"),
         ("t / l / w", "status / label / keywords"),
         ("h", "chapter heading (book)"),
         ("i / c", "compile: toggle / subtree"),

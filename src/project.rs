@@ -244,12 +244,21 @@ pub struct Project {
     pub children: HashMap<NodeId, Vec<NodeId>>,
     /// Document bodies, lazily loaded from disk.
     pub bodies: HashMap<NodeId, String>,
+    /// Per-node working notes (`notes/<id>.md`), lazily loaded. Documents and
+    /// folders alike; never part of the manuscript.
+    pub notes: HashMap<NodeId, String>,
+    /// Which nodes have a note on disk, so `has_note` costs nothing per frame.
+    note_files: std::collections::HashSet<NodeId>,
     next_seq: u64,
 }
 
 impl Project {
     pub fn docs_dir(&self) -> PathBuf {
         self.root.join("docs")
+    }
+
+    pub fn notes_dir(&self) -> PathBuf {
+        self.root.join("notes")
     }
 
     pub fn manifest_path(&self) -> PathBuf {
@@ -269,6 +278,8 @@ impl Project {
             nodes: HashMap::new(),
             children: HashMap::new(),
             bodies: HashMap::new(),
+            notes: HashMap::new(),
+            note_files: std::collections::HashSet::new(),
             next_seq: 0,
         };
         p.children.insert(ROOT.to_string(), Vec::new());
@@ -313,6 +324,21 @@ impl Project {
         }
         let _ = known;
 
+        // Which nodes carry a note. The file name's stem is the node id; the
+        // content stays on disk until something asks for it.
+        let mut note_files = std::collections::HashSet::new();
+        if let Ok(entries) = std::fs::read_dir(root.join("notes")) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if let Some(stem) = name.strip_suffix(".md")
+                    && nodes.contains_key(stem)
+                {
+                    note_files.insert(stem.to_string());
+                }
+            }
+        }
+
         Ok(Project {
             root: root.to_path_buf(),
             meta: manifest.project,
@@ -323,6 +349,8 @@ impl Project {
             nodes,
             children,
             bodies: HashMap::new(),
+            notes: HashMap::new(),
+            note_files,
             next_seq: 0,
         })
     }
@@ -476,8 +504,12 @@ impl Project {
                 && !n.file.is_empty() {
                     let _ = std::fs::remove_file(self.root.join("docs").join(&n.file));
                 }
+            if self.note_files.remove(r) {
+                let _ = std::fs::remove_file(self.notes_dir().join(format!("{r}.md")));
+            }
             self.children.remove(r);
             self.bodies.remove(r);
+            self.notes.remove(r);
         }
         removed
     }
@@ -552,6 +584,40 @@ impl Project {
         self.bodies.insert(id.to_string(), text);
     }
 
+    /// This node's working note, loading `notes/<id>.md` on first ask. Empty
+    /// string when the node has no note.
+    pub fn note(&mut self, id: &str) -> String {
+        if let Some(n) = self.notes.get(id) {
+            return n.clone();
+        }
+        let mut text = if self.note_files.contains(id) {
+            std::fs::read_to_string(self.notes_dir().join(format!("{id}.md"))).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        if text.contains('\r') {
+            text = text.replace("\r\n", "\n").replace('\r', "\n");
+        }
+        self.notes.insert(id.to_string(), text.clone());
+        text
+    }
+
+    /// Replace this node's note. An all-whitespace note is treated as none and
+    /// its file is dropped on the next save.
+    pub fn set_note(&mut self, id: &str, text: String) {
+        if text.trim().is_empty() {
+            self.note_files.remove(id);
+        } else {
+            self.note_files.insert(id.to_string());
+        }
+        self.notes.insert(id.to_string(), text);
+    }
+
+    /// Does this node carry a note? Cheap — no disk access.
+    pub fn has_note(&self, id: &str) -> bool {
+        self.note_files.contains(id)
+    }
+
     /// Word count for a single document, loading it if needed.
     pub fn word_count(&mut self, id: &str) -> usize {
         let b = self.body(id);
@@ -585,6 +651,20 @@ impl Project {
             }
             let path = self.docs_dir().join(&node.file);
             std::fs::write(path, body)?;
+        }
+
+        // Notes: write the ones with content, delete the files of the ones
+        // that were emptied.
+        let notes: Vec<(NodeId, String)> =
+            self.notes.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        for (id, text) in notes {
+            let path = self.notes_dir().join(format!("{id}.md"));
+            if text.trim().is_empty() {
+                let _ = std::fs::remove_file(&path);
+            } else {
+                std::fs::create_dir_all(self.notes_dir())?;
+                std::fs::write(path, text)?;
+            }
         }
 
         // Flatten the tree pre-order so the manifest reads top-to-bottom.
@@ -653,6 +733,43 @@ mod tests {
         assert_eq!(titles, ["Manuscript", "Chapter One", "Opening Scene", "Research"]);
         assert_eq!(q.body(&scene), "Hello there world.");
         assert_eq!(q.total_words(), 3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn notes_are_sidecar_files_that_round_trip_and_clean_up() {
+        let dir = scratch("notes");
+        let mut p = Project::create(&dir, "T").unwrap();
+        let scene = p
+            .walk()
+            .into_iter()
+            .map(|(i, _)| i)
+            .find(|i| p.nodes[i].title == "Opening Scene")
+            .unwrap();
+        let chapter = p.parent_of(&scene);
+
+        assert!(!p.has_note(&scene));
+        p.set_note(&scene, "check the timeline against ch. 3".into());
+        p.set_note(&chapter, "folders get notes too".into());
+        assert!(p.has_note(&scene));
+        p.save().unwrap();
+        assert!(dir.join("notes").join(format!("{scene}.md")).exists());
+
+        // Reopen: has_note is known without loading, content loads on ask.
+        let mut q = Project::open(&dir).unwrap();
+        assert!(q.has_note(&scene));
+        assert!(q.has_note(&chapter));
+        assert_eq!(q.note(&scene), "check the timeline against ch. 3");
+
+        // Emptying a note deletes its file on the next save.
+        q.set_note(&scene, "   ".into());
+        assert!(!q.has_note(&scene));
+        q.save().unwrap();
+        assert!(!dir.join("notes").join(format!("{scene}.md")).exists());
+
+        // Deleting the node removes its note file.
+        q.remove(&chapter);
+        assert!(!dir.join("notes").join(format!("{chapter}.md")).exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

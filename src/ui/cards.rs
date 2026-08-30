@@ -150,6 +150,12 @@ pub(super) fn draw_cards(f: &mut Frame, app: &mut App, area: Rect) {
             }
             footer.push(Span::styled("excluded", Style::default().fg(DIM)));
         }
+        if app.project.has_note(id) {
+            if !footer.is_empty() {
+                footer.push(Span::styled(" · ", Style::default().fg(DIM)));
+            }
+            footer.push(Span::styled("✎ notes", Style::default().fg(DIM)));
+        }
 
         app.card_hits.push((id.clone(), rect));
         let card = Block::default()

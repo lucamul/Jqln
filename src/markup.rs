@@ -38,6 +38,19 @@ fn inline_re() -> &'static Regex {
     })
 }
 
+/// CriticMarkup, the subset Jqln writes for inline comments: `{>>a note<<}` on
+/// its own, and `{==flagged text==}` that a following comment refers to. Both
+/// stay on one line, like emphasis.
+fn comment_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\{>>(.*?)<<\}").unwrap())
+}
+
+fn highlight_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\{==(.*?)==\}").unwrap())
+}
+
 fn faded() -> Style {
     Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM)
 }
@@ -52,6 +65,23 @@ pub fn highlights(lines: &[String]) -> Vec<Highlight> {
             out.push((((row, 0), (row, line.len())), faded(), MARKER_PRIORITY));
             continue;
         }
+        // Inline comments: the flagged text stays legible (underlined), the
+        // CriticMarkup punctuation and the comment itself recede.
+        for caps in highlight_re().captures_iter(line) {
+            let whole = caps.get(0).unwrap();
+            let inner = caps.get(1).unwrap();
+            out.push((
+                ((row, inner.start()), (row, inner.end())),
+                Style::default().add_modifier(Modifier::UNDERLINED),
+                CONTENT_PRIORITY,
+            ));
+            out.push((((row, whole.start()), (row, inner.start())), faded(), MARKER_PRIORITY));
+            out.push((((row, inner.end()), (row, whole.end())), faded(), MARKER_PRIORITY));
+        }
+        for m in comment_re().find_iter(line) {
+            out.push((((row, m.start()), (row, m.end())), faded(), MARKER_PRIORITY));
+        }
+
         for caps in inline_re().captures_iter(line) {
             let whole = caps.get(0).unwrap();
             let (mlen, modifier) = if caps.get(1).is_some() {
@@ -162,13 +192,30 @@ fn marker_starts(s: &str, marker: &str) -> bool {
     s.starts_with(marker) && !s[marker.len()..].starts_with('*')
 }
 
-/// The prose with its formatting removed: inline markers dropped, structural
-/// lines (`\newpage`, centre fences) taken out entirely. Used so markup does
-/// not inflate a word count. Borrows straight back when there is nothing to do.
-pub fn strip(body: &str) -> Cow<'_, str> {
-    if !body.contains('*') && !body.contains(PAGE_BREAK) && !body.contains(CENTER_CLOSE) {
+/// The prose with inline comments removed: `{>>a note<<}` dropped entirely,
+/// `{==flagged==}` unwrapped to just its text. What every compile emits, and
+/// the first step of `strip`. Borrows back when there is no `{`.
+pub fn without_comments(body: &str) -> Cow<'_, str> {
+    if !body.contains('{') {
         return Cow::Borrowed(body);
     }
+    let no_comments = comment_re().replace_all(body, "");
+    Cow::Owned(highlight_re().replace_all(&no_comments, "$1").into_owned())
+}
+
+/// The prose with its formatting removed: inline comments gone, emphasis markers
+/// dropped, structural lines (`\newpage`, centre fences) taken out entirely.
+/// Used so markup does not inflate a word count. Borrows straight back when
+/// there is nothing to do.
+pub fn strip(body: &str) -> Cow<'_, str> {
+    if !body.contains('*')
+        && !body.contains('{')
+        && !body.contains(PAGE_BREAK)
+        && !body.contains(CENTER_CLOSE)
+    {
+        return Cow::Borrowed(body);
+    }
+    let body = without_comments(body);
     let out = body
         .lines()
         .filter(|l| {
@@ -179,6 +226,45 @@ pub fn strip(body: &str) -> Cow<'_, str> {
         .collect::<Vec<_>>()
         .join("\n");
     Cow::Owned(out)
+}
+
+/// An inline comment found under the cursor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommentHit {
+    /// Byte range of the `{>>…<<}` marker itself.
+    pub comment: (usize, usize),
+    /// Byte range of the whole annotation — the `{>>…<<}` plus a `{==…==}`
+    /// highlight sitting immediately before it, if any.
+    pub full: (usize, usize),
+    /// The text a preceding `{==…==}` flags, kept when the comment is cleared.
+    pub flagged: Option<String>,
+    /// The current comment text.
+    pub text: String,
+}
+
+/// The `{>>…<<}` comment straddling character column `col`, if any.
+pub fn comment_at(line: &str, col: usize) -> Option<CommentHit> {
+    let byte = byte_index(line, col);
+    let caps = comment_re().captures_iter(line).find(|c| {
+        let w = c.get(0).unwrap();
+        byte >= w.start() && byte <= w.end()
+    })?;
+    let whole = caps.get(0).unwrap();
+    let mut full_start = whole.start();
+    let mut flagged = None;
+    for h in highlight_re().captures_iter(&line[..whole.start()]) {
+        let m = h.get(0).unwrap();
+        if m.end() == whole.start() {
+            full_start = m.start();
+            flagged = Some(h.get(1).unwrap().as_str().to_string());
+        }
+    }
+    Some(CommentHit {
+        comment: (whole.start(), whole.end()),
+        full: (full_start, whole.end()),
+        flagged,
+        text: caps.get(1).unwrap().as_str().to_string(),
+    })
 }
 
 /// Byte offset of character column `col` in `line` (clamped to the end).
@@ -301,6 +387,51 @@ mod tests {
             strip("one\n\\newpage\n::: center\ntwo\n:::"),
             "one\ntwo"
         );
+    }
+
+    #[test]
+    fn comments_are_removed_for_output_and_word_count() {
+        // A bare comment vanishes; a highlighted span keeps its text.
+        assert_eq!(without_comments("she left{>>when?<<} early"), "she left early");
+        assert_eq!(
+            without_comments("the {==long==}{>>cut this<<} road"),
+            "the long road"
+        );
+        assert_eq!(without_comments("no braces here"), "no braces here"); // borrowed
+        // strip folds comments in too, so a note never inflates a count.
+        assert_eq!(strip("a {==**bold**==}{>>trim<<} word"), "a bold word");
+    }
+
+    #[test]
+    fn highlights_fade_a_comment_and_underline_its_target() {
+        let hl = highlights(&lines("the {==long==}{>>cut<<} road"));
+        // "long" is underlined at content priority.
+        let content = hl.iter().find(|(_, s, _)| s.add_modifier.contains(Modifier::UNDERLINED));
+        let (((r, c0), (_, c1)), _, p) = *content.expect("the flagged text is underlined");
+        assert_eq!(r, 0);
+        assert_eq!(&"the {==long==}{>>cut<<} road"[c0..c1], "long");
+        assert_eq!(p, CONTENT_PRIORITY);
+        // The `{>>cut<<}` marker is faded whole.
+        assert!(hl.iter().any(|(((_, a), (_, b)), _, pr)| {
+            &"the {==long==}{>>cut<<} road"[*a..*b] == "{>>cut<<}" && *pr == MARKER_PRIORITY
+        }));
+    }
+
+    #[test]
+    fn comment_at_finds_the_marker_under_the_cursor() {
+        let line = "the {==long==}{>>cut this<<} road";
+        let hit = comment_at(line, 20).expect("cursor is inside the comment");
+        assert_eq!(hit.text, "cut this");
+        assert_eq!(&line[hit.comment.0..hit.comment.1], "{>>cut this<<}");
+        // `full` reaches back over the {==long==} highlight, whose text is kept.
+        assert_eq!(&line[hit.full.0..hit.full.1], "{==long==}{>>cut this<<}");
+        assert_eq!(hit.flagged.as_deref(), Some("long"));
+        assert_eq!(comment_at(line, 1), None); // out on "the"
+
+        // A bare comment flags nothing.
+        let bare = comment_at("done{>>really?<<}", 8).unwrap();
+        assert_eq!(bare.flagged, None);
+        assert_eq!(&"done{>>really?<<}"[bare.full.0..bare.full.1], "{>>really?<<}");
     }
 
     #[test]

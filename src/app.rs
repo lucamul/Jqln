@@ -47,6 +47,8 @@ pub enum Prompt {
     ChapterHeading,
     /// Editing one text field of the book settings.
     Book(BookField),
+    /// The text of an inline comment being added or re-edited.
+    Comment,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -61,6 +63,8 @@ pub enum Modal {
     BookSettings,
     /// Corrections for the misspelled word under the cursor.
     Spell,
+    /// The free-form note for the selected node.
+    Notes,
 }
 
 pub struct App {
@@ -94,6 +98,12 @@ pub struct App {
     /// Per-editor cache of misspelling highlights, keyed by a hash of the lines,
     /// so `restyle` only re-checks a document when its text has changed.
     pub spell_cache: HashMap<NodeId, (u64, Vec<crate::markup::Highlight>)>,
+    /// The multi-line buffer for the notes modal, and the node it belongs to.
+    pub notes_input: TextArea<'static>,
+    pub notes_target: Option<NodeId>,
+    /// When `Ctrl-N` lands on an existing comment, its row and span, so the
+    /// commit replaces it in place instead of inserting a new one.
+    pub comment_edit: Option<(usize, crate::markup::CommentHit)>,
     /// Column count of the card grid, set by the renderer so that up/down
     /// navigation can move by a row without the app guessing the layout.
     pub card_cols: usize,
@@ -162,6 +172,20 @@ fn single_line(initial: &str) -> TextArea<'static> {
     ta
 }
 
+/// A plain multi-line field — for the notes modal, where Enter means a new line
+/// and there is nothing to style.
+fn multiline(initial: &str) -> TextArea<'static> {
+    let lines: Vec<String> = if initial.is_empty() {
+        vec![String::new()]
+    } else {
+        initial.split('\n').map(str::to_string).collect()
+    };
+    let mut ta = TextArea::new(lines);
+    ta.set_cursor_line_style(ratatui::style::Style::default());
+    ta.move_cursor(tui_textarea::CursorMove::End);
+    ta
+}
+
 impl App {
     pub fn new(mut project: Project) -> Self {
         let session_base = project.total_words();
@@ -187,6 +211,9 @@ impl App {
             spell_suggestions: Vec::new(),
             spell_sel: 0,
             spell_cache: HashMap::new(),
+            notes_input: single_line(""),
+            notes_target: None,
+            comment_edit: None,
             card_cols: 3,
             card_scroll: 0,
             card_root: ROOT.to_string(),
