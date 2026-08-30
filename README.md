@@ -95,7 +95,7 @@ Switch with the function keys. All four show the same project.
 | Key | View | What it is for |
 | --- | --- | --- |
 | <kbd>F2</kbd> | **Editor** | The tree beside one document. Where you write. |
-| <kbd>F3</kbd> | **Cards** | One index card per document, showing synopses instead of prose. For judging structure without reading. |
+| <kbd>F3</kbd> | **Cards** | One index card per item at the level you are on — parts, chapters, or scenes — showing synopses instead of prose. For judging and reordering structure without reading. |
 | <kbd>F4</kbd> | **Outline** | Every document as a row with word count, status, and compile flag. For seeing where the weight sits. |
 | <kbd>F6</kbd> | **Continuous** | Every document in the current folder as one scrolling flow, so a chapter reads as a chapter. Toggles on top of the editor. |
 
@@ -146,15 +146,19 @@ Desktop environments often reserve <kbd>Alt</kbd>+arrow keys for themselves, and
 some terminals answer <kbd>F1</kbd> before the program sees it. The letter
 alternatives above work everywhere.
 
-A new document or folder always lands just below the selected row: as the last
-child of an open folder, or as the next sibling otherwise. The one exception is
-a new folder made while a folder full of documents is selected — that goes
-*beside* it, since a chapter of scenes wants another chapter next to it, not a
-sub-folder within. Use `>` / `<` afterwards to change any of this. Keywords are
-entered as a comma separated list.
+A new document or folder lands just below the selected row: the first child of
+an open folder, or the next sibling otherwise. The one exception is a new folder
+made while a folder full of documents is selected — that goes *beside* it, since
+a chapter of scenes wants another chapter next to it, not a sub-folder within.
+Use `>` / `<` afterwards to change any of this. Keywords are entered as a comma
+separated list.
 
-On the card view the same commands apply. Move between cards with the arrow
-keys, or `j` and `k` to change row.
+On the card view the same commands apply. Arrow keys (or `hjkl`) move between
+cards; <kbd>Enter</kbd> descends into a folder card, <kbd>Backspace</kbd> steps
+back out. Reorder the highlighted card among its siblings with `K` / `J`,
+<kbd>Alt</kbd>+arrows, or by dragging it onto another card. Pressing <kbd>F3</kbd>
+opens the level the selection sits on — so from a chapter you get all the
+chapters, ready to shuffle.
 
 ### While writing
 
@@ -168,6 +172,11 @@ for start and end of line, <kbd>Ctrl</kbd>+<kbd>W</kbd> to delete a word,
 Undo works a word at a time rather than a character at a time, which is the
 right size of step for prose. A formatting toggle is a delete and an insert, so
 it takes two presses to walk back off.
+
+Typing a second `-` right after the first turns the pair into an em dash (`—`);
+<kbd>Ctrl</kbd>+<kbd>Z</kbd> once if you wanted the hyphens. `?` is a question
+mark while writing — <kbd>F1</kbd> is the only help key that works from the
+editor.
 
 ### Formatting
 

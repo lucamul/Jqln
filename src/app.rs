@@ -83,6 +83,8 @@ pub struct App {
     pub card_cols: usize,
     /// First visible row of the card grid.
     pub card_scroll: usize,
+    /// The tree node whose children the card view is laying out.
+    pub card_root: NodeId,
     pub hits: Vec<Hit>,
     pub hit_sel: usize,
     pub query: String,
@@ -162,6 +164,7 @@ impl App {
             scroll: 0,
             card_cols: 3,
             card_scroll: 0,
+            card_root: ROOT.to_string(),
             hits: Vec::new(),
             hit_sel: 0,
             query: String::new(),
@@ -186,11 +189,48 @@ impl App {
         }
     }
 
-    /// Cards show the immediate children of the current container, which is
-    /// how a chapter reads as a row of scenes.
+    /// Cards show the children of `card_root` — a level of the tree, so parts,
+    /// chapters or scenes can be laid out and reordered as a set.
     pub fn cards(&self) -> Vec<NodeId> {
-        let container = self.flow_container().unwrap_or_else(|| ROOT.to_string());
-        self.project.children.get(&container).cloned().unwrap_or_default()
+        self.project.children.get(&self.card_root).cloned().unwrap_or_default()
+    }
+
+    /// Enter the card view showing the level the selection sits on (its
+    /// siblings), with the selection itself highlighted.
+    pub fn enter_cards(&mut self) {
+        self.card_root = match self.selected_id() {
+            Some(id) => self.project.parent_of(&id),
+            None => ROOT.to_string(),
+        };
+        self.card_scroll = 0;
+        let cards = self.cards();
+        let on_card = self.selected_id().map(|s| cards.contains(&s)).unwrap_or(false);
+        if !on_card && let Some(first) = cards.first().cloned() {
+            self.select_id(&first);
+        }
+    }
+
+    /// Show the children of the highlighted folder card.
+    pub fn cards_descend(&mut self) {
+        let Some(sel) = self.selected_id() else { return };
+        if self.project.nodes.get(&sel).map(|n| n.kind == Kind::Folder).unwrap_or(false) {
+            self.card_root = sel;
+            self.card_scroll = 0;
+            if let Some(first) = self.cards().first().cloned() {
+                self.select_id(&first);
+            }
+        }
+    }
+
+    /// Step back out to the parent level, keeping the folder we left highlighted.
+    pub fn cards_ascend(&mut self) {
+        if self.card_root == ROOT {
+            return;
+        }
+        let left = self.card_root.clone();
+        self.card_root = self.project.parent_of(&left);
+        self.card_scroll = 0;
+        self.select_id(&left);
     }
 
     /// The container whose documents make up the continuous flow: the

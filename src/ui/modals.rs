@@ -254,32 +254,33 @@ pub(super) fn draw_help(f: &mut Frame) {
         ("r / s", "rename / synopsis"),
         ("t / l / w", "status / label / keywords"),
         ("h", "chapter heading (book)"),
-        ("i", "compile include on/off"),
-        ("c", "compile this subtree"),
+        ("i / c", "compile: toggle / subtree"),
         ("v", "snapshots"),
         ("ctrl-f", "search (text or /regex/)"),
         ("d", "delete (asks first)"),
-        ("alt+↑↓", "reorder siblings"),
+        ("K / J", "reorder up / down"),
+        ("alt+↑↓", "reorder — also on cards"),
         ("alt+→←", "indent / outdent"),
         ("", ""),
+        ("F2/F3/F4", "editor · cards · outline"),
+        ("enter/bksp", "card: descend / go up"),
         ("click/drag", "place cursor / select text"),
         ("wheel", "scroll pane under pointer"),
-        ("F2/F3/F4", "editor · cards · outline"),
         ("F6", "continuous mode"),
         ("ctrl+↑↓", "step between documents"),
         ("F5 / F8", "compile: .md file / PDF"),
         ("ctrl-b", "book / PDF settings"),
         ("F7", "mouse capture on / off"),
         ("", ""),
-        ("ctrl-s / ctrl-q", "save / save and quit"),
+        ("ctrl-s/q", "save / save and quit"),
         ("", "press any key to close"),
     ];
 
     // One column when it fits vertically (keeps the blank-line grouping);
     // otherwise two columns of the non-blank rows split down the middle.
-    const KEY_W: usize = 10;
+    const KEY_W: usize = 11;
     let desc_w = rows.iter().map(|(_, v)| v.chars().count()).max().unwrap_or(0);
-    let col_w = (2 + KEY_W + desc_w) as u16;
+    let col_w = (2 + KEY_W + 1 + desc_w) as u16;
 
     let one_col_fits = f.area().height >= rows.len() as u16 + 4;
     let two_col = !one_col_fits && f.area().width >= col_w * 2 + 3;
@@ -299,7 +300,7 @@ pub(super) fn draw_help(f: &mut Frame) {
             .map(|(k, v)| {
                 Line::from(vec![
                     Span::styled(
-                        format!("  {k:<KEY_W$}"),
+                        format!("  {k:<KEY_W$} "),
                         Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
                     ),
                     Span::styled((*v).to_string(), Style::default().fg(Color::Reset)),

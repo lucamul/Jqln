@@ -132,11 +132,10 @@ fn card_view_shows_synopses_and_navigates_the_grid() {
     let second = app.project.insert(&chapter, None, "Second Scene", Kind::Text);
     app.project.nodes.get_mut(&second).unwrap().synopsis = "They reach the coast.".into();
 
-    app.sel = 1;                       // select the "Chapter One" folder
-    app.on_key(k(KeyCode::F(3)));      // switch to cards
-    // Selection dropped onto the first child rather than the container.
-    assert_eq!(app.selected_id().as_deref(), Some(first.as_str()));
-
+    // From a scene, the card view shows that scene's siblings.
+    app.sel = 2;
+    app.on_key(k(KeyCode::F(3)));
+    assert_eq!(app.card_root, chapter);
     let out = render(&mut app, 90, 16);
     println!("{out}");
     assert!(out.contains("cards"));
@@ -146,6 +145,14 @@ fn card_view_shows_synopses_and_navigates_the_grid() {
     // Right moves along the row of cards.
     app.on_key(k(KeyCode::Right));
     assert_eq!(app.selected_id().as_deref(), Some(second.as_str()));
+
+    // Backspace steps out to the chapter among its peers; Enter descends back.
+    app.on_key(k(KeyCode::Backspace));
+    assert_eq!(app.card_root, app.project.parent_of(&chapter));
+    assert_eq!(app.selected_id().as_deref(), Some(chapter.as_str()));
+    app.on_key(k(KeyCode::Enter));
+    assert_eq!(app.card_root, chapter);
+    assert_eq!(app.selected_id().as_deref(), Some(first.as_str()));
     let _ = std::fs::remove_dir_all(&app.project.root);
 }
 
@@ -162,6 +169,7 @@ fn card_grid_pages_instead_of_dropping_cards() {
     }
     app.view = View::Corkboard;
     app.sel = 2;
+    app.enter_cards();
 
     // A window this size fits two rows of cards, not six.
     let out = render(&mut app, 92, 20);
@@ -336,6 +344,7 @@ fn clicking_a_card_selects_it() {
     let second = app.project.insert(&chapter, None, "Second Scene", Kind::Text);
     app.view = View::Corkboard;
     app.sel = 2;
+    app.enter_cards();
     render(&mut app, 92, 16);
 
     let (_, rect) = app
@@ -360,6 +369,7 @@ fn dragging_a_card_reorders_the_corkboard() {
     let last = app.project.insert(&chapter, None, "Last", Kind::Text);
     app.view = View::Corkboard;
     app.sel = 2;
+    app.enter_cards();
     render(&mut app, 100, 20);
 
     let rect = |app: &App, id: &str| {
@@ -396,6 +406,7 @@ fn a_card_reorders_even_without_drag_events() {
     let last = app.project.insert(&chapter, None, "Last", Kind::Text);
     app.view = View::Corkboard;
     app.sel = 2;
+    app.enter_cards();
     render(&mut app, 100, 20);
     let rc = |app: &App, id: &str| {
         app.card_hits.iter().find(|(c, _)| c == id).map(|(_, r)| *r).unwrap()
@@ -531,13 +542,13 @@ fn renders_help_overlay() {
     let out = render(&mut app, 90, 24);
     println!("{out}");
     assert!(out.contains("Jqln"));
-    assert!(out.contains("reorder siblings"), "left column not fully drawn");
+    assert!(out.contains("reorder up / down"), "left column not fully drawn");
     assert!(out.contains("press any key to close"), "right column not fully drawn");
     // Descriptions are not truncated at the box edge.
     assert!(out.contains("status / label / keywords"));
 
     // Tall terminal: one column, still complete.
-    let out = render(&mut app, 60, 44);
+    let out = render(&mut app, 60, 50);
     assert!(out.contains("bold selection / word"));
     assert!(out.contains("press any key to close"));
     let _ = std::fs::remove_dir_all(&app.project.root);
@@ -569,6 +580,7 @@ fn a_dragged_card_marks_its_drop_target() {
     let last = app.project.insert(&chapter, None, "Last", Kind::Text);
     app.view = View::Corkboard;
     app.sel = 2;
+    app.enter_cards();
     render(&mut app, 100, 20);
     let c = app.card_hits.iter().find(|(id, _)| *id == last).map(|(_, r)| *r).unwrap();
     let a = app.card_hits.iter().find(|(id, _)| *id == first).map(|(_, r)| *r).unwrap();
@@ -591,9 +603,11 @@ fn card_view_hints_at_f7_when_mouse_is_off() {
     let mut app = scratch_app("card-f7-hint");
     app.view = View::Corkboard;
     app.sel = 2;
+    app.enter_cards();
     app.mouse = true;
     assert!(!render(&mut app, 90, 16).contains("F7 to drag"));
     app.mouse = false;
     assert!(render(&mut app, 90, 16).contains("F7 to drag"), "off-state should prompt F7");
     let _ = std::fs::remove_dir_all(&app.project.root);
 }
+
