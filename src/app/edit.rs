@@ -16,13 +16,117 @@ impl App {
     /// Recompute the in-place formatting highlights for one editor. Cheap
     /// enough to run on every frame; the editor keeps no styling of its own.
     pub fn restyle(&mut self, id: &str) {
+        let spell_marks = self.spell_marks(id);
         if let Some(ta) = self.editors.get_mut(id) {
             let marks = crate::markup::highlights(ta.lines());
             ta.clear_custom_highlight();
-            for (range, style, priority) in marks {
+            for (range, style, priority) in marks.into_iter().chain(spell_marks) {
                 ta.custom_highlight(range, style, priority);
             }
         }
+    }
+
+    /// Misspelling highlights for one editor, recomputed only when its text has
+    /// changed since the last call — `restyle` runs every frame, and in
+    /// continuous mode over every document on screen.
+    fn spell_marks(&mut self, id: &str) -> Vec<crate::markup::Highlight> {
+        use std::hash::{Hash, Hasher};
+        if !self.spell_on {
+            return Vec::new();
+        }
+        let Some(ta) = self.editors.get(id) else {
+            return Vec::new();
+        };
+        let lines = ta.lines();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        lines.hash(&mut hasher);
+        let hash = hasher.finish();
+        if let Some((cached, marks)) = self.spell_cache.get(id)
+            && *cached == hash
+        {
+            return marks.clone();
+        }
+        let marks = self.spell.highlights(lines);
+        self.spell_cache.insert(id.to_string(), (hash, marks.clone()));
+        marks
+    }
+
+    /// Flip spell checking on or off, telling the writer and remembering the
+    /// choice in `jqln.toml`.
+    pub(super) fn toggle_spell(&mut self) {
+        self.spell_on = !self.spell_on;
+        self.project.spelling.enabled = self.spell_on;
+        self.dirty = true;
+        self.status = if self.spell_on {
+            "Spell check on".into()
+        } else {
+            "Spell check off".into()
+        };
+        if let Some(id) = self.editor_doc() {
+            self.restyle(&id);
+        }
+    }
+
+    /// Ctrl-G in the editor: open the corrections list for the misspelled word
+    /// under the cursor, or say why there is nothing to correct.
+    pub(super) fn open_spell(&mut self) {
+        if !self.spell_on {
+            self.toggle_spell();
+            return;
+        }
+        let Some(id) = self.editor_doc() else { return };
+        self.ensure_editor(&id);
+        let Some(ta) = self.editors.get(&id) else { return };
+        let (row, col) = ta.cursor();
+        let line = ta.lines()[row].clone();
+        let Some((start, end, word)) = crate::spell::word_at(&line, col) else {
+            self.status = "No word under the cursor".into();
+            return;
+        };
+        if self.spell.is_correct(&word) {
+            self.status = format!("“{word}” is spelled correctly");
+            return;
+        }
+        self.spell_word = word.clone();
+        self.spell_at = (row, start, end);
+        self.spell_suggestions = self.spell.suggestions(&word);
+        self.spell_sel = 0;
+        self.modal = Modal::Spell;
+    }
+
+    /// Replace the flagged word with `replacement` and close the modal.
+    pub(super) fn spell_apply(&mut self, replacement: &str) {
+        let Some(id) = self.editor_doc() else {
+            self.modal = Modal::None;
+            return;
+        };
+        let (row, start, end) = self.spell_at;
+        if let Some(ta) = self.editors.get_mut(&id) {
+            ta.move_cursor(CursorMove::Jump(row as u16, start as u16));
+            ta.start_selection();
+            ta.move_cursor(CursorMove::Jump(row as u16, end as u16));
+            ta.insert_str(replacement);
+            self.dirty = true;
+        }
+        self.restyle(&id);
+        self.modal = Modal::None;
+    }
+
+    /// Add the flagged word to the project's personal list so it stops being
+    /// underlined, here and on every later open.
+    pub(super) fn spell_learn(&mut self) {
+        let word = self.spell_word.clone();
+        if !word.is_empty() && !self.project.spelling.words.contains(&word) {
+            self.spell.learn(&word);
+            self.project.spelling.words.push(word.clone());
+            self.spell_cache.clear();
+            self.dirty = true;
+        }
+        self.status = format!("Added “{word}” to your dictionary");
+        if let Some(id) = self.editor_doc() {
+            self.restyle(&id);
+        }
+        self.modal = Modal::None;
     }
 
     /// Toggle a `marker` (`*` or `**`) around the selection, or the word under

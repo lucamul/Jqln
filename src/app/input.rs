@@ -110,6 +110,14 @@ impl App {
                 self.begin(Prompt::Search, "");
                 true
             }
+            KeyCode::Char('g') if ctrl => {
+                if self.focus == Focus::Editor {
+                    self.open_spell();
+                } else {
+                    self.toggle_spell();
+                }
+                true
+            }
             KeyCode::Char('q') if ctrl => {
                 if self.dirty {
                     self.save();
@@ -559,6 +567,29 @@ impl App {
                 }
             }
             Modal::BookSettings => self.book_settings_key(key),
+            Modal::Spell => match key.code {
+                KeyCode::Esc => self.modal = Modal::None,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.spell_sel = self.spell_sel.saturating_sub(1);
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.spell_sel =
+                        (self.spell_sel + 1).min(self.spell_suggestions.len().saturating_sub(1));
+                }
+                KeyCode::Char('a') => self.spell_learn(),
+                KeyCode::Char(c @ '1'..='9') => {
+                    let i = c as usize - '1' as usize;
+                    if let Some(w) = self.spell_suggestions.get(i).cloned() {
+                        self.spell_apply(&w);
+                    }
+                }
+                KeyCode::Enter => {
+                    if let Some(w) = self.spell_suggestions.get(self.spell_sel).cloned() {
+                        self.spell_apply(&w);
+                    }
+                }
+                _ => {}
+            },
             Modal::ConfirmDelete => match key.code {
                 KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
                     if let Some(id) = self.selected_id() {

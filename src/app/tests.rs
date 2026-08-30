@@ -674,3 +674,39 @@ fn h_sets_a_chapter_heading_override() {
     let _ = std::fs::remove_dir_all(&a.project.root);
 }
 
+#[test]
+fn ctrl_g_corrects_a_misspelling_and_learns_a_word() {
+    let mut a = app();
+    // Open "Opening Scene" and type a misspelling.
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Enter));
+    assert!(matches!(a.focus, Focus::Editor));
+    type_str(&mut a, "teh");
+
+    // Ctrl-G on the word opens the corrections list; Enter takes the first.
+    a.on_key(key_mod(KeyCode::Char('g'), KeyModifiers::CONTROL));
+    assert!(matches!(a.modal, Modal::Spell));
+    assert_eq!(a.spell_suggestions.first().map(String::as_str), Some("the"));
+    a.on_key(key(KeyCode::Enter));
+    assert!(matches!(a.modal, Modal::None));
+    let id = a.editor_doc().unwrap();
+    assert_eq!(a.editors[&id].lines()[0], "the");
+
+    // A made-up name: learn it, and it lands in the project's word list.
+    a.on_key(key(KeyCode::Char(' ')));
+    type_str(&mut a, "Zybex");
+    a.on_key(key_mod(KeyCode::Char('g'), KeyModifiers::CONTROL));
+    assert!(matches!(a.modal, Modal::Spell));
+    a.on_key(key(KeyCode::Char('a')));
+    assert!(a.project.spelling.words.contains(&"Zybex".to_string()));
+    assert!(a.spell.is_correct("Zybex"));
+
+    // From the tree, Ctrl-G toggles the whole feature off.
+    a.on_key(key(KeyCode::Esc));
+    a.on_key(key_mod(KeyCode::Char('g'), KeyModifiers::CONTROL));
+    assert!(!a.spell_on);
+    assert!(!a.project.spelling.enabled);
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+

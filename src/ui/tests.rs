@@ -571,6 +571,46 @@ fn renders_book_settings() {
 }
 
 #[test]
+fn renders_spell_corrections_and_underlines_a_misspelling() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+    use ratatui::style::Color;
+    fn k(code: KeyCode, m: KeyModifiers) -> KeyEvent {
+        KeyEvent { code, modifiers: m, kind: KeyEventKind::Press, state: KeyEventState::NONE }
+    }
+    let none = KeyModifiers::NONE;
+
+    let mut app = scratch_app("spell");
+    // Open "Opening Scene" and type a misspelling.
+    app.on_key(k(KeyCode::Down, none));
+    app.on_key(k(KeyCode::Down, none));
+    app.on_key(k(KeyCode::Enter, none));
+    for c in "teh".chars() {
+        app.on_key(k(KeyCode::Char(c), none));
+    }
+
+    // The word carries a red underline in the editor.
+    let mut term = Terminal::new(TestBackend::new(90, 24)).unwrap();
+    term.draw(|f| draw(f, &mut app)).unwrap();
+    let buf = term.backend().buffer().clone();
+    let underlined = (0..buf.area.height).any(|y| {
+        (0..buf.area.width).any(|x| {
+            let c = &buf[(x, y)];
+            c.modifier.contains(Modifier::UNDERLINED) && c.fg == Color::Red
+        })
+    });
+    assert!(underlined, "the misspelled word should be red-underlined");
+
+    // Ctrl-G opens the corrections list.
+    app.on_key(k(KeyCode::Char('g'), KeyModifiers::CONTROL));
+    let out = render(&mut app, 90, 24);
+    println!("{out}");
+    assert!(out.contains("teh"));
+    assert!(out.contains("the"));
+    assert!(out.contains("add to dictionary"));
+    let _ = std::fs::remove_dir_all(&app.project.root);
+}
+
+#[test]
 fn a_dragged_card_marks_its_drop_target() {
     use crate::project::Kind;
     use crossterm::event::{MouseButton, MouseEventKind};

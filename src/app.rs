@@ -59,6 +59,8 @@ pub enum Modal {
     Snapshots,
     /// The book / PDF settings list.
     BookSettings,
+    /// Corrections for the misspelled word under the cursor.
+    Spell,
 }
 
 pub struct App {
@@ -78,6 +80,20 @@ pub struct App {
     pub continuous: bool,
     /// Row offset into the continuous flow.
     pub scroll: u16,
+    /// The English spell checker: bundled dictionary plus the project's words.
+    pub spell: crate::spell::Spell,
+    /// Whether misspellings are underlined right now. Persisted in `jqln.toml`.
+    pub spell_on: bool,
+    /// The misspelled word the corrections modal is working on, its location as
+    /// `(row, char_start, char_end)` in the editor, the suggestions, and the
+    /// highlighted one.
+    pub spell_word: String,
+    pub spell_at: (usize, usize, usize),
+    pub spell_suggestions: Vec<String>,
+    pub spell_sel: usize,
+    /// Per-editor cache of misspelling highlights, keyed by a hash of the lines,
+    /// so `restyle` only re-checks a document when its text has changed.
+    pub spell_cache: HashMap<NodeId, (u64, Vec<crate::markup::Highlight>)>,
     /// Column count of the card grid, set by the renderer so that up/down
     /// navigation can move by a row without the app guessing the layout.
     pub card_cols: usize,
@@ -149,6 +165,8 @@ fn single_line(initial: &str) -> TextArea<'static> {
 impl App {
     pub fn new(mut project: Project) -> Self {
         let session_base = project.total_words();
+        let spell = crate::spell::Spell::english(&project.spelling.words);
+        let spell_on = project.spelling.enabled;
         App {
             project,
             view: View::Editor,
@@ -162,6 +180,13 @@ impl App {
             quit: false,
             continuous: false,
             scroll: 0,
+            spell,
+            spell_on,
+            spell_word: String::new(),
+            spell_at: (0, 0, 0),
+            spell_suggestions: Vec::new(),
+            spell_sel: 0,
+            spell_cache: HashMap::new(),
             card_cols: 3,
             card_scroll: 0,
             card_root: ROOT.to_string(),

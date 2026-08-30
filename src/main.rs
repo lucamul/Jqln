@@ -5,6 +5,7 @@ mod book;
 mod compile;
 mod markup;
 mod project;
+mod spell;
 mod ui;
 
 use app::App;

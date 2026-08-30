@@ -13,5 +13,6 @@ crossterm = "0.29"
 ratatui = "0.30"
 regex = "1.13.1"
 serde = { version = "1.0.229", features = ["derive"] }
+spellbook = "0.4.2"
 toml = "1.1.4"
 tui-textarea-2 = { version = "0.13", default-features = false, features = ["crossterm", "search"] }
