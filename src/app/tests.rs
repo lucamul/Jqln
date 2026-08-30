@@ -757,6 +757,33 @@ fn ctrl_n_wraps_a_selection_with_a_highlight() {
 }
 
 #[test]
+fn ctrl_c_copies_the_selection_out_of_the_editor() {
+    let mut a = app();
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Enter));
+    let id = a.editor_doc().unwrap();
+    type_str(&mut a, "the salt road");
+
+    // Nothing selected: no copy, just a nudge.
+    a.on_key(key_mod(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    assert!(a.clipboard.is_none());
+    assert!(a.status.contains("Select some text"));
+
+    // Select "salt" and copy it.
+    let ta = a.editors.get_mut(&id).unwrap();
+    ta.move_cursor(CursorMove::Jump(0, 4));
+    ta.start_selection();
+    ta.move_cursor(CursorMove::Jump(0, 8));
+    a.on_key(key_mod(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    assert_eq!(a.clipboard.as_deref(), Some("salt"));
+    // The selection is left intact — copy reads, it does not cut.
+    assert!(a.editors[&id].selection_range().is_some());
+    assert_eq!(a.editors[&id].lines()[0], "the salt road");
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[test]
 fn ctrl_g_corrects_a_misspelling_and_learns_a_word() {
     let mut a = app();
     // Open "Opening Scene" and type a misspelling.

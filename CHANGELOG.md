@@ -10,6 +10,9 @@ keep new entries under that heading as you work.
 ## [Unreleased]
 
 ### Added
+- **Copy out** (`Ctrl-C` in the editor): the selection goes to the system
+  clipboard via OSC 52 and the platform clipboard tool (`pbcopy` / `wl-copy` /
+  `xclip` / `clip`). The selection is left intact.
 - **Document notes** (`N` in the tree): a free-form note on any document or
   folder, shown above the prose while you write and marked `✎` in the tree,
   cards, and editor title. Stored one file per node in `notes/<id>.md`.
