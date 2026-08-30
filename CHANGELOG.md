@@ -9,6 +9,8 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-30
+
 ### Added
 - Card view shows the level the selection sits on — a chapter shows all the
   chapters. `Enter` descends into a folder card, `Backspace` steps back out.
