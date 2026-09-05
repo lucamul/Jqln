@@ -293,21 +293,37 @@ pub(super) fn draw_notes(f: &mut Frame, app: &mut App) {
 }
 
 pub(super) fn draw_confirm(f: &mut Frame, app: &mut App) {
-    let title = app
-        .selected_id()
-        .and_then(|i| app.project.nodes.get(&i).map(|n| n.title.clone()))
-        .unwrap_or_default();
-    let area = centered(f.area(), 60, 5);
+    let sel = app.selected_id().unwrap_or_default();
+    let title = app.project.nodes.get(&sel).map(|n| n.title.clone()).unwrap_or_default();
+
+    let (heading, question) = if sel == crate::project::TRASH {
+        (
+            " Empty Trash ",
+            format!(
+                "Permanently delete {} item(s) in the Trash? This cannot be undone.",
+                app.project.trash_count()
+            ),
+        )
+    } else if app.project.is_trashed(&sel) {
+        (
+            " Delete for good ",
+            format!("Permanently delete \"{title}\" and everything inside it? This cannot be undone."),
+        )
+    } else {
+        (" Move to Trash ", format!("Move \"{title}\" and everything inside it to the Trash?"))
+    };
+
+    let area = centered(f.area(), 62, 6);
     f.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Red))
         .title(Span::styled(
-            " Delete ",
+            heading,
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ));
     let text = vec![
-        Line::from(format!("Delete \"{title}\" and everything inside it?")),
+        Line::from(question),
         Line::from(""),
         Line::from(Span::styled(
             "y to confirm · any other key to cancel",
@@ -347,7 +363,9 @@ pub(super) fn draw_help(f: &mut Frame) {
         ("i / c", "compile: toggle / subtree"),
         ("v", "snapshots"),
         ("ctrl-f", "search (text or /regex/)"),
-        ("d", "delete (asks first)"),
+        ("d", "delete → the Trash"),
+        ("enter", "restore (when in the Trash)"),
+        ("X", "empty the Trash"),
         ("K / J", "reorder up / down"),
         ("alt+↑↓", "reorder — also on cards"),
         ("alt+→←", "indent / outdent"),

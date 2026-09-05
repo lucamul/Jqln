@@ -59,7 +59,12 @@ impl Project {
             return Ok(Vec::new());
         }
         let needle = Matcher::build(query)?;
-        let ids: Vec<NodeId> = self.walk().into_iter().map(|(i, _)| i).collect();
+        let ids: Vec<NodeId> = self
+            .walk()
+            .into_iter()
+            .map(|(i, _)| i)
+            .filter(|i| !self.is_trashed(i))
+            .collect();
         let mut hits = Vec::new();
 
         for id in ids {

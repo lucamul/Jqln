@@ -134,7 +134,10 @@ pub fn build(
                 .walk()
                 .into_iter()
                 .map(|(i, _)| i)
-                .filter(|i| project.nodes.get(i).map(|n| n.kind == Kind::Text).unwrap_or(false))
+                .filter(|i| {
+                    project.nodes.get(i).map(|n| n.kind == Kind::Text).unwrap_or(false)
+                        && !project.is_trashed(i)
+                })
                 .collect();
             (ids, String::new())
         }
@@ -167,6 +170,9 @@ pub fn build(
 fn outline(project: &mut Project) -> String {
     let mut s = String::new();
     for (id, depth) in project.walk() {
+        if project.is_trashed(&id) {
+            continue;
+        }
         let indent = "  ".repeat(depth);
         let (title, kind, words) = {
             let n = &project.nodes[&id];

@@ -10,6 +10,13 @@ keep new entries under that heading as you work.
 ## [Unreleased]
 
 ### Added
+- **Trash** — `d` now moves a document or folder (and its subtree) into a Trash
+  folder at the bottom of the tree instead of erasing it. `Enter` on a trashed
+  item restores it to exactly where it was; `d` again (or on the Trash folder)
+  deletes for good after a confirmation; `X` empties the whole Trash. The Trash
+  is excluded from compiles, word counts and search, and persists in
+  `jqln.toml`. The Trash row and a status-bar marker turn yellow past ~20 items.
+- The status bar shows a `⭯` marker once a project holds ≥ 50 snapshots.
 - **Assistant panel** (`F9`) — a right-hand AI chat, Anthropic or OpenAI. Built
   into the normal binary but inert unless launched with `jqln
   --with-ai-assistant` (`--no-default-features` leaves it out of the build
@@ -19,6 +26,10 @@ keep new entries under that heading as you work.
   `{>>…<<}` comments that `/apply` inserts on the current document. It never
   rewrites prose; nothing is sent until you send a message and confirm.
   Configured in the `[assistant]` table of `jqln.toml`.
+
+### Fixed
+- Deleting a document now also removes its `snapshots/<id>/` folder, which was
+  previously left orphaned forever.
 
 ## [1.2.0] - 2026-08-30
 

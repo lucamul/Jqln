@@ -26,6 +26,10 @@ use ratatui::widgets::Paragraph;
 pub(crate) const ACCENT: Color = Color::Cyan;
 pub(crate) const DIM: Color = Color::DarkGray;
 
+/// The Trash / snapshot store turn a status-bar marker yellow past these sizes.
+pub(crate) const TRASH_WARN: usize = 20;
+pub(crate) const SNAP_WARN: usize = 50;
+
 pub fn draw(f: &mut Frame, app: &mut App) {
     app.sync_cursor_modes();
 
@@ -114,6 +118,19 @@ fn draw_status(f: &mut Frame, app: &mut App, area: Rect) {
     if !app.spell_on {
         spans.push(Span::styled("  ·  ", Style::default().fg(DIM)));
         spans.push(Span::styled("spell off", Style::default().fg(DIM)));
+    }
+
+    let trash = app.project.trash_count();
+    if trash >= TRASH_WARN {
+        spans.push(Span::styled("  ·  ", Style::default().fg(DIM)));
+        spans.push(Span::styled(format!("🗑 {trash}"), Style::default().fg(Color::Yellow)));
+    }
+    if app.project.snapshot_count >= SNAP_WARN {
+        spans.push(Span::styled("  ·  ", Style::default().fg(DIM)));
+        spans.push(Span::styled(
+            format!("⭯ {}", app.project.snapshot_count),
+            Style::default().fg(Color::Yellow),
+        ));
     }
 
     if !app.status.is_empty() {

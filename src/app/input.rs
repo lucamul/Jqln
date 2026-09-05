@@ -214,6 +214,60 @@ impl App {
             return;
         };
 
+        // Empty the Trash from anywhere in the tree.
+        if key.code == KeyCode::Char('X') {
+            self.begin_empty_trash();
+            return;
+        }
+
+        // The Trash node: `d` empties it, arrows / space / enter fold it open
+        // and shut, everything else is a no-op with a hint.
+        if id == crate::project::TRASH {
+            match key.code {
+                KeyCode::Char('d') | KeyCode::Delete => {
+                    self.modal = Modal::ConfirmDelete;
+                    return;
+                }
+                KeyCode::Enter | KeyCode::Tab => {
+                    if let Some(n) = self.project.nodes.get_mut(&id) {
+                        n.collapsed = !n.collapsed;
+                    }
+                    return;
+                }
+                KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right
+                | KeyCode::Up | KeyCode::Down
+                | KeyCode::Char('j') | KeyCode::Char('k')
+                | KeyCode::Home | KeyCode::End => {}
+                _ => {
+                    self.status = "The Trash — d (or X) empties it".into();
+                    return;
+                }
+            }
+        }
+
+        // A trashed item: Enter restores it, d deletes it for good, navigation
+        // still works. Every other edit is refused with a hint.
+        if self.project.is_trashed(&id) {
+            match key.code {
+                KeyCode::Enter | KeyCode::Tab => {
+                    self.restore_from_trash(&id);
+                    return;
+                }
+                KeyCode::Char('d') | KeyCode::Delete => {
+                    self.modal = Modal::ConfirmDelete;
+                    return;
+                }
+                KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right
+                | KeyCode::Up | KeyCode::Down
+                | KeyCode::Char('j') | KeyCode::Char('k')
+                | KeyCode::Home | KeyCode::End => {}
+                _ => {
+                    self.status = "In the Trash — Enter restores, d deletes for good".into();
+                    return;
+                }
+            }
+        }
+
         match key.code {
             KeyCode::Char('K') => {
                 if self.project.move_vertical(&id, -1) {
@@ -630,14 +684,7 @@ impl App {
             },
             Modal::ConfirmDelete => match key.code {
                 KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-                    if let Some(id) = self.selected_id() {
-                        for r in self.project.remove(&id) {
-                            self.editors.remove(&r);
-                        }
-                        self.clamp_sel();
-                        self.dirty = true;
-                        self.status = "Deleted".into();
-                    }
+                    self.confirm_delete();
                     self.modal = Modal::None;
                 }
                 _ => self.modal = Modal::None,

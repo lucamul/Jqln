@@ -4,6 +4,57 @@
 use super::*;
 
 impl App {
+    /// The `y` in the delete confirmation. What it does depends on where the
+    /// selection sits: outside the Trash it moves there; the Trash node itself
+    /// empties; a already-trashed item is erased for good.
+    pub(super) fn confirm_delete(&mut self) {
+        let Some(id) = self.selected_id() else { return };
+        if id == crate::project::TRASH {
+            let gone = self.project.empty_trash();
+            let n = gone.len();
+            for r in gone {
+                self.editors.remove(&r);
+            }
+            self.status = format!("Trash emptied — {n} item(s) gone for good");
+        } else if self.project.is_trashed(&id) {
+            for r in self.project.empty_trash_item(&id) {
+                self.editors.remove(&r);
+            }
+            self.status = "Deleted for good".into();
+        } else {
+            self.project.trash(&id);
+            self.status = "Moved to Trash — select it there and press Enter to restore".into();
+        }
+        self.clamp_sel();
+        self.dirty = true;
+    }
+
+    /// The `r` on a trashed item: put it back where it was.
+    pub(super) fn restore_from_trash(&mut self, id: &str) {
+        let where_to = {
+            let parent = self.project.nodes.get(id).and_then(|n| n.trashed.as_ref()).map(|t| t.parent.clone());
+            parent
+                .filter(|p| !p.is_empty())
+                .and_then(|p| self.project.nodes.get(&p).map(|n| n.title.clone()))
+                .unwrap_or_else(|| "the top level".to_string())
+        };
+        if self.project.restore(id) {
+            self.select_id(id);
+            self.dirty = true;
+            self.status = format!("Restored to {where_to}");
+        }
+    }
+
+    /// Open the delete confirmation targeting the Trash node (the `X` shortcut).
+    pub(super) fn begin_empty_trash(&mut self) {
+        if self.project.trash_count() == 0 {
+            self.status = "Trash is empty".into();
+            return;
+        }
+        self.select_id(crate::project::TRASH);
+        self.modal = Modal::ConfirmDelete;
+    }
+
     pub(super) fn open_snapshots(&mut self) {
         let Some(id) = self.editor_doc() else {
             self.status = "Snapshots are per document; folders have no text".into();
