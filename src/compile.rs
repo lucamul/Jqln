@@ -154,6 +154,22 @@ mod tests {
     }
 
     #[test]
+    fn a_trashed_chapter_is_not_compiled() {
+        let mut p = scratch("trash-compile");
+        let keep = p.insert(ROOT, None, "Keep", Kind::Text);
+        p.set_body(&keep, "Kept prose.".into());
+        let drop = p.insert(ROOT, None, "Drop", Kind::Text);
+        p.set_body(&drop, "Trashed prose.".into());
+        p.trash(&drop);
+
+        let out = compile(&mut p, None, &Options::default());
+        assert!(out.contains("Kept prose."));
+        assert!(!out.contains("Trashed prose."), "the Trash is not part of the book");
+        assert!(!out.contains("Trash"));
+        let _ = std::fs::remove_dir_all(&p.root);
+    }
+
+    #[test]
     fn excluding_a_folder_drops_its_whole_subtree() {
         let mut p = scratch("exclude");
         let ms = p.insert(ROOT, None, "Manuscript", Kind::Folder);

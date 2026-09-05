@@ -112,7 +112,10 @@ include = true
 
 Both files are line-oriented and diff cleanly, so a project is worth putting
 under version control. Reordering a chapter shows up as a moved block in
-`jqln.toml`, not as a rewrite of your prose.
+`jqln.toml`, not as a rewrite of your prose. Deleting one moves it to the Trash
+— still a `[[node]]`, just parked under a `__trash__` folder with a `trashed`
+key recording where it came from; its `.md` file only leaves `docs/` when you
+empty the Trash.
 
 ## The four views
 
@@ -167,7 +170,9 @@ tree and types the letter `n` in the editor.
 | `c` | Compile just this subtree |
 | `v` | Snapshots of this document |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> | Book / PDF settings |
-| `d` | Delete, with a confirmation |
+| `d` | Move to the Trash (confirms first) |
+| <kbd>Enter</kbd> | On a trashed item: restore it |
+| `X` | Empty the Trash |
 | <kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd>, or `K` `J` | Reorder among siblings |
 | <kbd>Alt</kbd>+<kbd>→</kbd> <kbd>←</kbd>, or `>` `<` | Indent / outdent |
 
@@ -181,6 +186,16 @@ made while a folder full of documents is selected — that goes *beside* it, sin
 a chapter of scenes wants another chapter next to it, not a sub-folder within.
 Use `>` / `<` afterwards to change any of this. Keywords are entered as a comma
 separated list.
+
+**The Trash.** `d` moves the selection and its whole subtree into a **Trash**
+folder at the bottom of the tree — nothing is erased, and it stays out of
+compiles, word counts and search. The Trash and its contents show dimmed;
+`Space` folds it away. Select an item inside it and <kbd>Enter</kbd> puts the
+item back exactly where it was. `d` on a trashed item, or on the Trash folder
+itself, deletes for good after a confirmation; `X` from anywhere empties the
+whole Trash. The Trash lives in `jqln.toml` like the rest of the tree, so it
+survives across sessions. Once it holds twenty-odd items the Trash row and a
+`🗑` marker in the status bar turn yellow as a nudge to empty it.
 
 On the card view the same commands apply. Arrow keys (or `hjkl`) move between
 cards; <kbd>Enter</kbd> descends into a folder card, <kbd>Backspace</kbd> steps
@@ -499,7 +514,10 @@ Restoring is not destructive: the text being replaced is snapshotted first, so
 an accidental restore can itself be undone. `d` removes a snapshot, and asks
 for a second press first, since a snapshot is the backup of last resort.
 
-Snapshots are plain Markdown under `snapshots/`, named by date.
+Snapshots are plain Markdown under `snapshots/`, named by date. They are never
+pruned automatically — once a project holds fifty or more, a `⭯` marker appears
+in the status bar as a reminder to weed the list with `d`. Deleting a document
+for good (emptying it from the Trash) does take its snapshots with it.
 
 ## Word counts
 

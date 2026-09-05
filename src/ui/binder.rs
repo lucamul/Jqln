@@ -1,8 +1,8 @@
 //! The binder pane: the document tree down the left of the editor view.
 
-use super::{ACCENT, DIM};
+use super::{ACCENT, DIM, TRASH_WARN};
 use crate::app::{App, Focus};
-use crate::project::Kind;
+use crate::project::{Kind, TRASH};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -24,6 +24,24 @@ pub(super) fn draw_binder(f: &mut Frame, app: &mut App, area: Rect) {
                 .map(|c| c.is_empty())
                 .unwrap_or(true);
 
+            // The Trash node gets its own row: an icon, a count, and a yellow
+            // nudge once it fills up.
+            if id == TRASH {
+                let n = app.project.trash_count();
+                let colour = if n >= TRASH_WARN { Color::Yellow } else { DIM };
+                let marker = if node.collapsed { "▸ " } else { "▾ " };
+                return ListItem::new(Line::from(vec![
+                    Span::styled("  ".repeat(*depth), Style::default()),
+                    Span::styled(marker, Style::default().fg(colour)),
+                    Span::styled(
+                        format!("Trash · {n}"),
+                        Style::default().fg(colour).add_modifier(Modifier::BOLD),
+                    ),
+                ]));
+            }
+
+            let in_trash = app.project.is_trashed(id);
+
             let marker = match (node.kind, has_kids, node.collapsed) {
                 (Kind::Folder, true, true) => "▸ ",
                 (Kind::Folder, true, false) => "▾ ",
@@ -36,7 +54,7 @@ pub(super) fn draw_binder(f: &mut Frame, app: &mut App, area: Rect) {
             if node.kind == Kind::Folder {
                 style = style.add_modifier(Modifier::BOLD);
             }
-            if !node.include {
+            if !node.include || in_trash {
                 style = style.fg(DIM).add_modifier(Modifier::DIM);
             }
 
@@ -48,7 +66,7 @@ pub(super) fn draw_binder(f: &mut Frame, app: &mut App, area: Rect) {
             if app.project.has_note(id) {
                 spans.push(Span::styled(" ✎", Style::default().fg(DIM)));
             }
-            if !node.include {
+            if !node.include && !in_trash {
                 spans.push(Span::styled("  ○", Style::default().fg(DIM)));
             }
             ListItem::new(Line::from(spans))

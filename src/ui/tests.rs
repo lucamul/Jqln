@@ -43,6 +43,21 @@ fn renders_binder_and_editor() {
 }
 
 #[test]
+fn a_full_trash_shows_a_count_in_the_tree_and_status_bar() {
+    use crate::project::{Kind, ROOT};
+    let mut app = scratch_app("trash-ui");
+    for i in 0..21 {
+        let id = app.project.insert(ROOT, None, &format!("junk {i}"), Kind::Text);
+        app.project.trash(&id);
+    }
+    let out = render(&mut app, 90, 24);
+    println!("{out}");
+    assert!(out.contains("Trash · 21"), "the Trash row shows its count");
+    assert!(out.contains("🗑 21"), "and the status bar nudges once it is full");
+    let _ = std::fs::remove_dir_all(&app.project.root);
+}
+
+#[test]
 fn renders_prose_with_soft_wrap() {
     let mut app = scratch_app("wrap");
     // Select "Opening Scene" and type a long paragraph.

@@ -273,8 +273,8 @@ impl App {
     /// siblings), with the selection itself highlighted.
     pub fn enter_cards(&mut self) {
         self.card_root = match self.selected_id() {
-            Some(id) => self.project.parent_of(&id),
-            None => ROOT.to_string(),
+            Some(id) if !self.project.is_trashed(&id) => self.project.parent_of(&id),
+            _ => ROOT.to_string(),
         };
         self.card_scroll = 0;
         let cards = self.cards();
@@ -332,6 +332,7 @@ impl App {
                 .map(|(i, _)| i)
                 .filter(|i| {
                     self.project.nodes.get(i).map(|n| n.kind == Kind::Text).unwrap_or(false)
+                        && !self.project.is_trashed(i)
                 })
                 .collect(),
         }

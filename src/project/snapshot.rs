@@ -23,11 +23,14 @@ impl Project {
             n += 1;
         }
         std::fs::write(dir.join(format!("{stamp}.md")), body)?;
+        self.snapshot_count += 1;
         Ok(stamp)
     }
 
-    pub fn delete_snapshot(&self, id: &str, name: &str) -> std::io::Result<()> {
-        std::fs::remove_file(self.snapshots_dir(id).join(format!("{name}.md")))
+    pub fn delete_snapshot(&mut self, id: &str, name: &str) -> std::io::Result<()> {
+        std::fs::remove_file(self.snapshots_dir(id).join(format!("{name}.md")))?;
+        self.snapshot_count = self.snapshot_count.saturating_sub(1);
+        Ok(())
     }
 
     /// Snapshot names for a document, newest first.
@@ -98,6 +101,35 @@ mod tests {
             })
             .collect();
         assert!(saved.contains(&"Rewritten and worse.".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn snapshot_count_tracks_add_delete_and_reopen() {
+        let dir = scratch("snap-count");
+        let mut p = Project::create(&dir, "T").unwrap();
+        let scene = p
+            .walk()
+            .into_iter()
+            .map(|(i, _)| i)
+            .find(|i| p.nodes[i].title == "Opening Scene")
+            .unwrap();
+
+        p.set_body(&scene, "one".into());
+        let a = p.take_snapshot(&scene).unwrap();
+        p.set_body(&scene, "two".into());
+        p.take_snapshot(&scene).unwrap();
+        assert_eq!(p.snapshot_count, 2);
+
+        p.restore_snapshot(&scene, &a).unwrap(); // snapshots the current text first
+        assert_eq!(p.snapshot_count, 3);
+
+        p.delete_snapshot(&scene, &a).unwrap();
+        assert_eq!(p.snapshot_count, 2);
+
+        // A fresh open recounts from disk.
+        let q = Project::open(&dir).unwrap();
+        assert_eq!(q.snapshot_count, 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

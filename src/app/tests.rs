@@ -140,16 +140,52 @@ fn a_new_folder_nests_into_a_folder_of_folders() {
 }
 
 #[test]
-fn delete_needs_confirmation() {
+fn delete_moves_to_trash_and_restores() {
     let mut a = app();
-    let before = a.rows().len();
+    // Row 1 is "Chapter One" (a folder holding "Opening Scene").
+    a.on_key(key(KeyCode::Down));
+    let chapter = a.selected_id().unwrap();
+    let manuscript = a.project.parent_of(&chapter);
+
     a.on_key(key(KeyCode::Char('d')));
-    a.on_key(key(KeyCode::Char('n')));  // anything but 'y' cancels
-    assert_eq!(a.rows().len(), before);
+    a.on_key(key(KeyCode::Char('n'))); // cancels
+    assert_eq!(a.project.parent_of(&chapter), manuscript);
 
     a.on_key(key(KeyCode::Char('d')));
     a.on_key(key(KeyCode::Char('y')));
-    assert_eq!(a.rows().len(), 1, "deleting Manuscript takes its subtree");
+    assert!(a.project.is_trashed(&chapter), "moved to Trash, not erased");
+    assert_eq!(a.project.trash_count(), 1);
+    // Still in the model, and the Trash starts expanded so it shows in the rows.
+    assert!(a.rows().iter().any(|(id, _)| id == &chapter));
+    // The Trash node is the last top-level row.
+    let rows = a.rows();
+    let last_top = rows.iter().rev().find(|(_, d)| *d == 0).map(|(id, _)| id.as_str());
+    assert_eq!(last_top, Some("__trash__"));
+
+    // Select the trashed chapter and restore it with Enter.
+    a.select_id(&chapter);
+    a.on_key(key(KeyCode::Enter));
+    assert!(!a.project.is_trashed(&chapter));
+    assert_eq!(a.project.parent_of(&chapter), manuscript);
+    assert_eq!(a.project.trash_count(), 0);
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[test]
+fn empty_trash_erases_for_good() {
+    let mut a = app();
+    a.on_key(key(KeyCode::Down)); // "Chapter One"
+    let chapter = a.selected_id().unwrap();
+    a.on_key(key(KeyCode::Char('d')));
+    a.on_key(key(KeyCode::Char('y')));
+    assert!(a.project.is_trashed(&chapter));
+
+    // `X` targets the Trash node; `y` empties it.
+    a.on_key(key(KeyCode::Char('X')));
+    assert!(matches!(a.modal, Modal::ConfirmDelete));
+    a.on_key(key(KeyCode::Char('y')));
+    assert!(!a.project.nodes.contains_key(&chapter), "gone from the model");
+    assert!(!a.project.nodes.contains_key("__trash__"), "Trash node pruned when empty");
     let _ = std::fs::remove_dir_all(&a.project.root);
 }
 

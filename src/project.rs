@@ -29,6 +29,11 @@ pub type NodeId = String;
 /// Key used in `children` for top-level nodes.
 pub const ROOT: &str = "";
 
+/// Reserved id of the Trash node — a folder at the top level that deleted
+/// subtrees move into instead of being erased. Not a real title; `gen_id`
+/// only ever produces 7-character base-36 strings, so it cannot clash.
+pub const TRASH: &str = "__trash__";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
@@ -69,6 +74,22 @@ pub struct Node {
     pub include: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
+    /// Set on the root of a subtree that has been moved to the Trash: where to
+    /// put it back. Descendants keep their own `parent`, so the shape restores
+    /// intact.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trashed: Option<Trashed>,
+}
+
+/// Where a trashed subtree came from, for `restore`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Trashed {
+    /// Original parent id (`""` = top level).
+    pub parent: NodeId,
+    /// Original position among its siblings.
+    pub index: usize,
+    /// When it was trashed — a `text::timestamp()`.
+    pub at: String,
 }
 
 impl Node {
@@ -91,6 +112,7 @@ impl Node {
             heading: String::new(),
             include: true,
             collapsed: false,
+            trashed: None,
         }
     }
 
@@ -283,6 +305,9 @@ pub struct Project {
     pub notes: HashMap<NodeId, String>,
     /// Which nodes have a note on disk, so `has_note` costs nothing per frame.
     note_files: std::collections::HashSet<NodeId>,
+    /// Total `.md` files under `snapshots/`, kept current so the status bar can
+    /// warn about a bloated store without walking the disk every frame.
+    pub snapshot_count: usize,
     next_seq: u64,
 }
 
@@ -315,6 +340,7 @@ impl Project {
             bodies: HashMap::new(),
             notes: HashMap::new(),
             note_files: std::collections::HashSet::new(),
+            snapshot_count: 0,
             next_seq: 0,
         };
         p.children.insert(ROOT.to_string(), Vec::new());
@@ -374,6 +400,8 @@ impl Project {
             }
         }
 
+        let snapshot_count = count_snapshots(&root.join("snapshots"));
+
         Ok(Project {
             root: root.to_path_buf(),
             meta: manifest.project,
@@ -387,6 +415,7 @@ impl Project {
             bodies: HashMap::new(),
             notes: HashMap::new(),
             note_files,
+            snapshot_count,
             next_seq: 0,
         })
     }
@@ -530,12 +559,16 @@ impl Project {
         true
     }
 
-    /// Remove a node and its whole subtree. Returns removed ids.
+    /// Remove a node and its whole subtree from disk. Returns removed ids.
     pub fn remove(&mut self, id: &str) -> Vec<NodeId> {
         let mut removed = Vec::new();
         self.collect_subtree(id, &mut removed);
         self.detach(id);
         for r in &removed {
+            self.snapshot_count = self
+                .snapshot_count
+                .saturating_sub(self.list_snapshots(r).len());
+            let _ = std::fs::remove_dir_all(self.snapshots_dir(r));
             if let Some(n) = self.nodes.remove(r)
                 && !n.file.is_empty() {
                     let _ = std::fs::remove_file(self.root.join("docs").join(&n.file));
@@ -548,6 +581,105 @@ impl Project {
             self.notes.remove(r);
         }
         removed
+    }
+
+    // ---- Trash -------------------------------------------------------------
+
+    /// Move a node and its subtree into the Trash instead of erasing it.
+    /// Nothing touches disk until the Trash is emptied.
+    pub fn trash(&mut self, id: &str) {
+        if id == TRASH || self.is_trashed(id) {
+            return;
+        }
+        self.ensure_trash();
+        let origin = Trashed {
+            parent: self.parent_of(id),
+            index: self.index_in_parent(id),
+            at: text::timestamp(),
+        };
+        self.detach(id);
+        self.attach(id, TRASH, 0);
+        if let Some(n) = self.nodes.get_mut(id) {
+            n.trashed = Some(origin);
+        }
+    }
+
+    /// Put a trashed subtree back where it came from. Returns false if the node
+    /// is not actually in the Trash.
+    pub fn restore(&mut self, id: &str) -> bool {
+        let Some(origin) = self.nodes.get_mut(id).and_then(|n| n.trashed.take()) else {
+            return false;
+        };
+        self.detach(id);
+        let parent = if origin.parent.is_empty() || self.nodes.contains_key(&origin.parent) {
+            origin.parent
+        } else {
+            ROOT.to_string()
+        };
+        let len = self.children.get(&parent).map(|k| k.len()).unwrap_or(0);
+        self.attach(id, &parent, origin.index.min(len));
+        self.prune_trash_if_empty();
+        true
+    }
+
+    /// Permanently delete one trashed subtree. Returns the erased ids.
+    pub fn empty_trash_item(&mut self, id: &str) -> Vec<NodeId> {
+        if !self.is_trashed(id) || id == TRASH {
+            return Vec::new();
+        }
+        let gone = self.remove(id);
+        self.prune_trash_if_empty();
+        gone
+    }
+
+    /// Permanently delete everything in the Trash. Returns the erased ids.
+    pub fn empty_trash(&mut self) -> Vec<NodeId> {
+        let items = self.children.get(TRASH).cloned().unwrap_or_default();
+        let mut gone = Vec::new();
+        for item in &items {
+            gone.extend(self.remove(item));
+        }
+        self.prune_trash_if_empty();
+        gone
+    }
+
+    /// Number of top-level items in the Trash.
+    pub fn trash_count(&self) -> usize {
+        self.children.get(TRASH).map(|k| k.len()).unwrap_or(0)
+    }
+
+    /// Is this node the Trash, or inside it?
+    pub fn is_trashed(&self, id: &str) -> bool {
+        let mut cur = id.to_string();
+        loop {
+            if cur == TRASH {
+                return true;
+            }
+            if cur.is_empty() {
+                return false;
+            }
+            cur = self.parent_of(&cur);
+        }
+    }
+
+    fn ensure_trash(&mut self) {
+        if self.nodes.contains_key(TRASH) {
+            return;
+        }
+        let mut node = Node::new(TRASH.to_string(), "Trash", Kind::Folder);
+        node.parent = ROOT.to_string();
+        node.include = false;
+        self.children.entry(ROOT.to_string()).or_default().push(TRASH.to_string());
+        self.children.insert(TRASH.to_string(), Vec::new());
+        self.nodes.insert(TRASH.to_string(), node);
+    }
+
+    fn prune_trash_if_empty(&mut self) {
+        if self.children.get(TRASH).map(|k| k.is_empty()).unwrap_or(false) {
+            self.detach(TRASH);
+            self.nodes.remove(TRASH);
+            self.children.remove(TRASH);
+        }
     }
 
     pub fn collect_subtree(&self, id: &str, out: &mut Vec<NodeId>) {
@@ -577,7 +709,12 @@ impl Project {
         let Some(kids) = self.children.get(parent) else {
             return;
         };
-        for k in kids {
+        // The Trash always sits last at the top level.
+        let mut order: Vec<&NodeId> = kids.iter().collect();
+        if parent.is_empty() {
+            order.sort_by_key(|k| k.as_str() == TRASH);
+        }
+        for k in order {
             out.push((k.clone(), depth));
             let collapsed = respect_collapse
                 && self.nodes.get(k).map(|n| n.collapsed).unwrap_or(false);
@@ -660,13 +797,16 @@ impl Project {
         count_words(&b)
     }
 
-    /// Word count across every text document in the project.
+    /// Word count across every text document in the project — the Trash aside.
     pub fn total_words(&mut self) -> usize {
         let ids: Vec<NodeId> = self
             .walk()
             .into_iter()
             .map(|(i, _)| i)
-            .filter(|i| self.nodes.get(i).map(|n| n.kind == Kind::Text).unwrap_or(false))
+            .filter(|i| {
+                self.nodes.get(i).map(|n| n.kind == Kind::Text).unwrap_or(false)
+                    && !self.is_trashed(i)
+            })
             .collect();
         ids.iter().map(|i| self.word_count(i)).sum()
     }
@@ -729,6 +869,19 @@ impl Project {
         std::fs::rename(&tmp, &final_path)?;
         Ok(())
     }
+}
+
+/// Total `.md` files across every `snapshots/<id>/` directory.
+fn count_snapshots(dir: &Path) -> usize {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter_map(|e| std::fs::read_dir(e.path()).ok())
+        .flat_map(|d| d.flatten())
+        .filter(|f| f.file_name().to_string_lossy().ends_with(".md"))
+        .count()
 }
 
 #[cfg(test)]
@@ -844,6 +997,75 @@ mod tests {
         let removed = p.remove(&parent);
         assert_eq!(removed.len(), 2);
         assert!(!p.nodes.contains_key(&child));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn trash_holds_a_subtree_and_restore_puts_it_back() {
+        let dir = scratch("trash");
+        let mut p = Project::create(&dir, "T").unwrap();
+        let a = p.insert(ROOT, None, "A", Kind::Folder);
+        let ch = p.insert(&a, None, "Chapter", Kind::Folder);
+        let sc = p.insert(&ch, None, "Scene", Kind::Text);
+        p.set_body(&sc, "words words words".into());
+        p.insert(ROOT, None, "B", Kind::Folder);
+
+        let before_words = p.total_words();
+        let ch_index = p.index_in_parent(&ch);
+
+        p.trash(&ch);
+        assert!(p.is_trashed(&ch) && p.is_trashed(&sc), "the whole subtree is trashed");
+        assert_eq!(p.parent_of(&ch), TRASH);
+        assert_eq!(p.trash_count(), 1);
+        assert_eq!(p.total_words(), before_words - 3, "trash is out of the word count");
+        // Trash always sorts last among the top-level rows.
+        let last_top = p.walk().into_iter().rev().find(|(_, d)| *d == 0).map(|(id, _)| id);
+        assert_eq!(last_top, Some(TRASH.to_string()));
+
+        assert!(p.restore(&ch));
+        assert!(!p.is_trashed(&ch) && !p.is_trashed(&sc));
+        assert_eq!(p.parent_of(&ch), a);
+        assert_eq!(p.index_in_parent(&ch), ch_index, "back in its old slot");
+        assert!(!p.nodes.contains_key(TRASH), "empty Trash node is pruned");
+        assert_eq!(p.total_words(), before_words);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn emptying_trash_erases_files_and_snapshots() {
+        let dir = scratch("trash-empty");
+        let mut p = Project::create(&dir, "T").unwrap();
+        let doc = p.insert(ROOT, None, "Doc", Kind::Text);
+        p.set_body(&doc, "text".into());
+        p.save().unwrap();
+        let file = p.docs_dir().join(&p.nodes[&doc].file);
+        p.take_snapshot(&doc).unwrap();
+        assert_eq!(p.snapshot_count, 1);
+        assert!(file.exists() && p.snapshots_dir(&doc).exists());
+
+        p.trash(&doc);
+        assert!(file.exists(), "trashing keeps the file");
+
+        let gone = p.empty_trash();
+        assert_eq!(gone, vec![doc.clone()]);
+        assert!(!file.exists(), "emptying erases the doc file");
+        assert!(!p.snapshots_dir(&doc).exists(), "and its snapshots");
+        assert_eq!(p.snapshot_count, 0);
+        assert!(!p.nodes.contains_key(TRASH));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn trash_survives_a_save_and_reopen() {
+        let dir = scratch("trash-persist");
+        let mut p = Project::create(&dir, "T").unwrap();
+        let ch = p.insert(ROOT, None, "Chapter", Kind::Folder);
+        p.trash(&ch);
+        p.save().unwrap();
+
+        let q = Project::open(&dir).unwrap();
+        assert!(q.is_trashed(&ch));
+        assert_eq!(q.nodes[&ch].trashed.as_ref().map(|t| t.parent.as_str()), Some(""));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
