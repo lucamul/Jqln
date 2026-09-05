@@ -9,6 +9,8 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-05
+
 ### Added
 - **Trash** — `d` now moves a document or folder (and its subtree) into a Trash
   folder at the bottom of the tree instead of erasing it. `Enter` on a trashed
