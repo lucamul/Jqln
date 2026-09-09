@@ -9,6 +9,8 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-09
+
 ### Added
 - **Spell-check languages.** `jqln --install-dict <code>` downloads a Hunspell
   dictionary (Italian, German, French, …) into `~/.config/jqln/dictionaries/`;
