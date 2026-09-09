@@ -165,6 +165,7 @@ tree and types the letter `n` in the editor.
 | `r` / `s` | Rename / edit synopsis |
 | `N` | Edit this node's notes |
 | `t` / `l` / `w` | Status / label / keywords |
+| `L` | Spell-check language for this project |
 | `h` | Chapter heading override (book compile) |
 | `i` | Include or exclude from compiling |
 | `c` | Compile just this subtree |
@@ -271,6 +272,7 @@ coinages. Those words live in the `[spelling]` table of `jqln.toml`:
 ```toml
 [spelling]
 enabled = true
+language = "en"
 words = ["Eldoria", "kessari"]
 ```
 
@@ -278,6 +280,26 @@ All-caps acronyms, single letters, and words with an internal capital
 (`iPhone`, `McConnell`) are left alone. Checking is case-insensitive for a
 capitalised sentence opener, and a curly apostrophe counts the same as a
 straight one.
+
+### Other languages
+
+Only `en` ships in the binary — it is the one Hunspell dictionary with a
+permissive licence. For any other language, fetch its dictionary once:
+
+```sh
+jqln --install-dict it     # also: de, fr, es, pt, nl, sv, pl, ru, …
+```
+
+That downloads the `.aff` / `.dic` pair (and its licence — usually GPL or LGPL,
+which is why Jqln can't bundle them) from the
+[`wooorm/dictionaries`](https://github.com/wooorm/dictionaries) collection into
+`~/.config/jqln/dictionaries/`. Then set the project's language — `L` in the
+tree, or `language = "it"` in the `[spelling]` table. The book compile picks up
+the same code for Typst's hyphenation. If `curl` and `wget` are both missing,
+drop the two files into that folder yourself, named `<code>.aff` / `<code>.dic`.
+
+When the chosen language has no dictionary, spell check quietly checks nothing
+and the status bar shows `no <code> dictionary`.
 
 ## Notes and comments
 

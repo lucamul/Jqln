@@ -57,10 +57,29 @@ impl App {
         self.spell_on = !self.spell_on;
         self.project.spelling.enabled = self.spell_on;
         self.dirty = true;
-        self.status = if self.spell_on {
-            "Spell check on".into()
-        } else {
+        self.status = if !self.spell_on {
             "Spell check off".into()
+        } else if let Some(p) = &self.spell.problem {
+            format!("Spell check on, but {p}")
+        } else {
+            format!("Spell check on ({})", self.spell.lang)
+        };
+        if let Some(id) = self.editor_doc() {
+            self.restyle(&id);
+        }
+    }
+
+    /// `L` in the tree: switch the dictionary language for this project.
+    pub(super) fn set_spell_language(&mut self, lang: &str) {
+        let lang = lang.trim().to_lowercase();
+        let lang = if lang.is_empty() { "en".to_string() } else { lang };
+        self.project.spelling.language = lang.clone();
+        self.spell = crate::spell::Spell::load(&lang, &self.project.spelling.words);
+        self.spell_cache.clear();
+        self.dirty = true;
+        self.status = match &self.spell.problem {
+            Some(p) => p.clone(),
+            None => format!("Spelling language: {lang}"),
         };
         if let Some(id) = self.editor_doc() {
             self.restyle(&id);

@@ -395,6 +395,10 @@ impl App {
                 let v = self.project.nodes.get(&id).map(|n| n.label.clone()).unwrap_or_default();
                 self.begin(Prompt::Label, &v);
             }
+            KeyCode::Char('L') => {
+                let v = self.project.spelling.language.clone();
+                self.begin(Prompt::SpellLanguage, &v);
+            }
             KeyCode::Char('w') => {
                 let v = self
                     .project
@@ -783,6 +787,7 @@ impl App {
             }
             Prompt::Book(field) => self.commit_book_field(field, text),
             Prompt::Comment => self.apply_comment(text),
+            Prompt::SpellLanguage => self.set_spell_language(&text),
             Prompt::Keywords => {
                 if let Some(id) = self.selected_id() {
                     if let Some(n) = self.project.nodes.get_mut(&id) {

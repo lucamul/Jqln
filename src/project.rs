@@ -146,18 +146,21 @@ impl Default for Compile {
     }
 }
 
-/// English spell checking: whether it is on, and the writer's own words —
-/// character names, places — that the dictionary should accept.
+/// Spell checking: whether it is on, the dictionary language, and the writer's
+/// own words — character names, places — that the dictionary should accept.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Spelling {
     pub enabled: bool,
+    /// Dictionary language. `en` is built in; other codes need
+    /// `jqln --install-dict <code>` first.
+    pub language: String,
     pub words: Vec<String>,
 }
 
 impl Default for Spelling {
     fn default() -> Self {
-        Spelling { enabled: true, words: Vec::new() }
+        Spelling { enabled: true, language: "en".to_string(), words: Vec::new() }
     }
 }
 
@@ -907,6 +910,7 @@ mod tests {
             .clone();
         p.set_body(&scene, "Hello there world.".into());
         p.spelling.words.push("Eldoria".into());
+        p.spelling.language = "it".into();
         p.save().unwrap();
 
         // The manifest is meant to be read and diffed by a human.
@@ -920,6 +924,7 @@ mod tests {
         assert_eq!(q.meta.name, "Test");
         assert_eq!(q.spelling.words, ["Eldoria"]);
         assert!(q.spelling.enabled);
+        assert_eq!(q.spelling.language, "it");
         assert_eq!(q.assistant.provider, "anthropic");
         let titles: Vec<String> = q.walk().into_iter().map(|(i, _)| q.nodes[&i].title.clone()).collect();
         assert_eq!(titles, ["Manuscript", "Chapter One", "Opening Scene", "Research"]);

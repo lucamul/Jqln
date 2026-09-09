@@ -86,8 +86,13 @@ fn build(project: &mut Project) -> String {
     out.push_str(&format!(
         "#set page(width: {w_in}in, height: {h_in}in, margin: (inside: 0.9in, outside: 0.65in, top: 0.8in, bottom: 0.8in))\n"
     ));
+    // Typst wants a bare ISO code (`it`, `de`), not a region tag.
+    let lang: String = {
+        let l = project.spelling.language.split(['-', '_']).next().unwrap_or("en");
+        if l.is_empty() { "en".to_string() } else { l.to_lowercase() }
+    };
     out.push_str(&format!(
-        "#set text(font: {}, size: {}pt, lang: \"en\")\n",
+        "#set text(font: {}, size: {}pt, lang: \"{lang}\")\n",
         s(&b.body_font),
         trim_f(b.body_size)
     ));
