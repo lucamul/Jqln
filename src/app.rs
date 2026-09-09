@@ -53,6 +53,8 @@ pub enum Prompt {
     Book(BookField),
     /// The text of an inline comment being added or re-edited.
     Comment,
+    /// The spell-check dictionary language for this project.
+    SpellLanguage,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -204,7 +206,8 @@ fn multiline(initial: &str) -> TextArea<'static> {
 impl App {
     pub fn new(mut project: Project) -> Self {
         let session_base = project.total_words();
-        let spell = crate::spell::Spell::english(&project.spelling.words);
+        let spell =
+            crate::spell::Spell::load(&project.spelling.language, &project.spelling.words);
         let spell_on = project.spelling.enabled;
         #[cfg(feature = "assistant")]
         let assistant = crate::assistant::Assistant::new(&project);

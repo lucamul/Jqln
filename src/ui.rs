@@ -118,6 +118,12 @@ fn draw_status(f: &mut Frame, app: &mut App, area: Rect) {
     if !app.spell_on {
         spans.push(Span::styled("  ·  ", Style::default().fg(DIM)));
         spans.push(Span::styled("spell off", Style::default().fg(DIM)));
+    } else if app.spell_on && !app.spell.ready() {
+        spans.push(Span::styled("  ·  ", Style::default().fg(DIM)));
+        spans.push(Span::styled(
+            format!("no {} dictionary", app.spell.lang),
+            Style::default().fg(Color::Yellow),
+        ));
     }
 
     let trash = app.project.trash_count();

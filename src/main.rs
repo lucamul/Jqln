@@ -6,6 +6,7 @@ mod assistant;
 mod book;
 mod clipboard;
 mod compile;
+mod config;
 mod markup;
 mod project;
 mod spell;
@@ -25,6 +26,7 @@ USAGE
 
 OPTIONS
     --with-ai-assistant         enable the AI assistant panel (F9) for this run
+    --install-dict <lang>       download a spell-check dictionary (e.g. it, de, fr)
     -h, --help                  print this help
 
 The project directory holds jqln.toml plus a docs/ folder of Markdown.
@@ -40,9 +42,27 @@ fn main() {
 
     let mut with_ai = false;
     let mut positionals: Vec<&str> = Vec::new();
-    for a in &args {
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
         match a.as_str() {
             "--with-ai-assistant" => with_ai = true,
+            "--install-dict" => {
+                let lang = it.next().map(String::as_str).unwrap_or("").trim();
+                if lang.is_empty() || lang == "en" {
+                    print!("{}", spell::install::languages());
+                    return;
+                }
+                match spell::install::run(lang) {
+                    Ok(msg) => {
+                        println!("{msg}");
+                        return;
+                    }
+                    Err(e) => {
+                        eprintln!("jqln: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
             s if s.starts_with('-') => {
                 eprintln!("jqln: unknown option {s}\n\n{USAGE}");
                 std::process::exit(1);

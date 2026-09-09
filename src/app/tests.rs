@@ -820,6 +820,30 @@ fn ctrl_c_copies_the_selection_out_of_the_editor() {
 }
 
 #[test]
+fn capital_l_switches_the_spelling_language() {
+    let mut a = app();
+    assert_eq!(a.project.spelling.language, "en");
+    assert!(a.spell.ready());
+
+    a.on_key(key(KeyCode::Char('L')));
+    assert!(matches!(a.modal, Modal::Input(Prompt::SpellLanguage)));
+    type_str(&mut a, "zz-nope"); // a language with no installed dictionary
+    a.on_key(key(KeyCode::Enter));
+
+    assert_eq!(a.project.spelling.language, "zz-nope");
+    assert!(!a.spell.ready(), "no dictionary for an uninstalled language");
+    assert!(a.status.contains("install-dict"));
+    assert!(a.dirty);
+
+    // Back to English.
+    a.on_key(key(KeyCode::Char('L')));
+    type_str(&mut a, "en");
+    a.on_key(key(KeyCode::Enter));
+    assert!(a.spell.ready());
+    let _ = std::fs::remove_dir_all(&a.project.root);
+}
+
+#[test]
 fn ctrl_g_corrects_a_misspelling_and_learns_a_word() {
     let mut a = app();
     // Open "Opening Scene" and type a misspelling.

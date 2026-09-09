@@ -9,6 +9,14 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+### Added
+- **Spell-check languages.** `jqln --install-dict <code>` downloads a Hunspell
+  dictionary (Italian, German, French, …) into `~/.config/jqln/dictionaries/`;
+  `L` in the tree, or `[spelling] language`, switches a project to it. English
+  stays built in. The book compile passes the language code to Typst for
+  hyphenation. A missing dictionary just disables checking, with a status-bar
+  note.
+
 ## [1.3.0] - 2026-09-05
 
 ### Added

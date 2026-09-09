@@ -1,9 +1,13 @@
-//! English spell checking.
+//! Spell checking against a Hunspell dictionary, via the pure-Rust `spellbook`
+//! crate. Misspelled words in the editor get a red underline; the writer's own
+//! additions live in the `[spelling]` table of `jqln.toml`.
 //!
-//! A bundled `en_US` Hunspell dictionary (SCOWL, permissively licensed — see
-//! `assets/en_US.LICENSE.txt`) checked with the pure-Rust `spellbook` crate.
-//! Misspelled words in the editor get a red underline; the writer's own
-//! additions live in the `[spell]` table of `jqln.toml`.
+//! `en` ships in the binary (SCOWL `en_US`, permissively licensed — see
+//! `assets/en_US.LICENSE.txt`). Other languages are Hunspell `.aff` / `.dic`
+//! pairs the writer places in — or `jqln --install-dict <lang>` downloads to —
+//! `~/.config/jqln/dictionaries/`.
+
+pub mod install;
 
 use crate::markup::Highlight;
 use ratatui::style::{Color, Modifier, Style};
@@ -13,41 +17,62 @@ use ratatui::style::{Color, Modifier, Style};
 const SPELL_PRIORITY: u8 = 3;
 
 pub struct Spell {
-    dict: spellbook::Dictionary,
+    /// `None` when no dictionary is loaded for the chosen language — the
+    /// checker then flags nothing.
+    dict: Option<spellbook::Dictionary>,
+    pub lang: String,
+    /// A sentence for the status line: absent when a dictionary is loaded.
+    pub problem: Option<String>,
 }
 
 impl Spell {
-    /// Load the bundled dictionary plus the writer's own words.
-    pub fn english(personal: &[String]) -> Self {
-        let aff = include_str!("../assets/en_US.aff");
-        let dic = include_str!("../assets/en_US.dic");
-        let mut dict =
-            spellbook::Dictionary::new(aff, dic).expect("the bundled en_US dictionary parses");
-        for w in personal {
-            let _ = dict.add(w);
-        }
-        Spell { dict }
+    /// Load the dictionary for `lang` plus the writer's own words. Never fails:
+    /// a missing or broken dictionary yields an inert checker and a `problem`
+    /// message.
+    pub fn load(lang: &str, personal: &[String]) -> Self {
+        let lang = if lang.trim().is_empty() { "en" } else { lang.trim() };
+        let (dict, problem) = match read_dictionary(lang) {
+            Ok((aff, dic)) => match spellbook::Dictionary::new(&aff, &dic) {
+                Ok(mut d) => {
+                    for w in personal {
+                        let _ = d.add(w);
+                    }
+                    (Some(d), None)
+                }
+                Err(e) => (None, Some(format!("{lang} dictionary is unreadable: {e}"))),
+            },
+            Err(problem) => (None, Some(problem)),
+        };
+        Spell { dict, lang: lang.to_string(), problem }
+    }
+
+    /// Whether a dictionary is actually loaded.
+    pub fn ready(&self) -> bool {
+        self.dict.is_some()
     }
 
     /// Add a word to the running dictionary (does not touch `jqln.toml` — the
     /// caller records it in the project's personal list).
     pub fn learn(&mut self, word: &str) {
-        let _ = self.dict.add(word);
+        if let Some(d) = &mut self.dict {
+            let _ = d.add(word);
+        }
     }
 
     /// Is `word` spelled correctly? Tolerates a capitalised sentence-opener and
-    /// a curly apostrophe.
+    /// a curly apostrophe. With no dictionary, everything is "correct".
     pub fn is_correct(&self, word: &str) -> bool {
-        if self.dict.check(word) {
+        let Some(dict) = &self.dict else { return true };
+        if dict.check(word) {
             return true;
         }
         let lowered = word.to_lowercase();
-        if lowered != word && self.dict.check(&lowered) {
+        if lowered != word && dict.check(&lowered) {
             return true;
         }
         if word.contains('\u{2019}') {
             let straight = word.replace('\u{2019}', "'");
-            if self.dict.check(&straight) {
+            if dict.check(&straight) {
                 return true;
             }
         }
@@ -56,14 +81,18 @@ impl Spell {
 
     /// Up to eight corrections for a misspelled word, best first.
     pub fn suggestions(&self, word: &str) -> Vec<String> {
+        let Some(dict) = &self.dict else { return Vec::new() };
         let mut out = Vec::new();
-        self.dict.suggest(word, &mut out);
+        dict.suggest(word, &mut out);
         out.truncate(8);
         out
     }
 
     /// A red-underline highlight for every misspelled word in `lines`.
     pub fn highlights(&self, lines: &[String]) -> Vec<Highlight> {
+        if self.dict.is_none() {
+            return Vec::new();
+        }
         let style = Style::default().fg(Color::Red).add_modifier(Modifier::UNDERLINED);
         let mut out = Vec::new();
         for (row, line) in lines.iter().enumerate() {
@@ -82,6 +111,26 @@ impl Spell {
         }
         out
     }
+}
+
+/// The `.aff` and `.dic` text for `lang`. `en` is embedded; every other
+/// language is read from `~/.config/jqln/dictionaries/`.
+fn read_dictionary(lang: &str) -> Result<(String, String), String> {
+    if lang == "en" {
+        return Ok((
+            include_str!("../assets/en_US.aff").to_string(),
+            include_str!("../assets/en_US.dic").to_string(),
+        ));
+    }
+    let dir = crate::config::dictionaries_dir()
+        .ok_or("no config directory (set $HOME or $XDG_CONFIG_HOME)")?;
+    let aff = dir.join(format!("{lang}.aff"));
+    let dic = dir.join(format!("{lang}.dic"));
+    if !aff.exists() || !dic.exists() {
+        return Err(format!("no {lang} dictionary — run: jqln --install-dict {lang}"));
+    }
+    let read = |p: &std::path::Path| std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()));
+    Ok((read(&aff)?, read(&dic)?))
 }
 
 fn is_word_char(c: char) -> bool {
@@ -147,7 +196,16 @@ mod tests {
     use super::*;
 
     fn spell() -> Spell {
-        Spell::english(&["Eldoria".to_string()])
+        Spell::load("en", &["Eldoria".to_string()])
+    }
+
+    #[test]
+    fn an_uninstalled_language_yields_an_inert_checker() {
+        let s = Spell::load("zz-not-a-lang", &[]);
+        assert!(!s.ready());
+        assert!(s.problem.is_some());
+        assert!(s.is_correct("anything"), "nothing is flagged without a dictionary");
+        assert!(s.highlights(&["total nonsense qwxz".to_string()]).is_empty());
     }
 
     #[test]
@@ -191,3 +249,4 @@ mod tests {
         assert_eq!(word_at("the qwik fox", 3), None); // on the space
     }
 }
+

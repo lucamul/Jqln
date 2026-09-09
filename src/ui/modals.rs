@@ -34,6 +34,7 @@ pub(super) fn draw_input(f: &mut Frame, app: &mut App, prompt: Prompt) {
         Prompt::ChapterHeading => " Heading — blank, 'title', or a name ".to_string(),
         Prompt::Book(field) => format!(" {} ", field.label()),
         Prompt::Comment => " Comment ".to_string(),
+        Prompt::SpellLanguage => " Spelling language — en, it, de, …  (install-dict first) ".to_string(),
     };
     let area = centered(f.area(), 60, 3);
     f.render_widget(Clear, area);
@@ -359,6 +360,7 @@ pub(super) fn draw_help(f: &mut Frame) {
         ("r / s", "rename / synopsis"),
         ("N", "edit notes"),
         ("t / l / w", "status / label / keywords"),
+        ("L", "spelling language"),
         ("h", "chapter heading (book)"),
         ("i / c", "compile: toggle / subtree"),
         ("v", "snapshots"),
