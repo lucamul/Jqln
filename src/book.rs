@@ -115,7 +115,7 @@ fn build(project: &mut Project) -> String {
     out.push_str(&format!(
         "#let chapsub(t) = {{ align(center, text(size: 1.3em, style: \"italic\")[#t]); v(2.4em) }}\n\
         #let scenebreak = {{ v(1em); align(center, text(tracking: 2pt)[{}]); v(1em) }}\n",
-        raw(&b.scene_break)
+        content(&b.scene_break)
     ));
     out.push_str(&format!(
         "#show heading.where(level: 2): it => {{\n\
@@ -503,6 +503,24 @@ mod tests {
         assert!(typ.exists());
         assert!(typ.ends_with("the-salt-road.typ"));
         assert!(std::fs::read_to_string(&typ).unwrap().contains("== Chapter One"));
+        let _ = std::fs::remove_dir_all(&p.root);
+    }
+
+    #[test]
+    fn scene_break_of_asterisks_survives_into_the_document() {
+        // `raw()` strips `*` as a markup character, which used to erase the
+        // most natural scene-break glyph entirely (issue: "* * *" -> "").
+        let mut p = scratch("scenebreak");
+        p.book.scene_break = "* * *".into();
+        let ms = p.insert(ROOT, None, "Manuscript", Kind::Folder);
+        let c = p.insert(&ms, None, "One", Kind::Folder);
+        let s1 = p.insert(&c, None, "a", Kind::Text);
+        p.set_body(&s1, "First.".into());
+        let s2 = p.insert(&c, None, "b", Kind::Text);
+        p.set_body(&s2, "Second.".into());
+
+        let doc = build(&mut p);
+        assert!(doc.contains(r#"text(tracking: 2pt)[#"* * *"]"#));
         let _ = std::fs::remove_dir_all(&p.root);
     }
 }
