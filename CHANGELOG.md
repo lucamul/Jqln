@@ -9,6 +9,12 @@ keep new entries under that heading as you work.
 
 ## [Unreleased]
 
+### Fixed
+- **`scene_break` glyphs made of `*` (e.g. `"* * *"`) now render.** They were
+  being run through the same sanitizer used for heading text, which strips
+  Typst markup characters — including every `*` — collapsing a plain `"* * *"`
+  dinkus to nothing.
+
 ## [1.4.0] - 2026-09-09
 
 ### Added
